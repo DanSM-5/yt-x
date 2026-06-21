@@ -75,7 +75,11 @@ else
   readonly CLI_SUPPORTS_TRUE_COLOR=false
 fi
 
-export SHELL="sh"
+# Use an ABSOLUTE path for $SHELL. fzf spawns preview/execute children via $SHELL;
+# the native Windows fzf (git-bash/MSYS) silently fails to spawn the child when
+# $SHELL is a bare name like "sh" (or unset), which breaks preview navigation.
+# `command -v sh` returns an absolute path on Linux, macOS and MSYS alike.
+export SHELL="$(command -v sh || printf '%s' sh)"
 
 # ==============================================================================
 # SETUP PATHS
@@ -1498,7 +1502,7 @@ fzf_preview() {
   if [ "$dim" = "x" ]; then
     dim=$(stty size </dev/tty | awk "{print \$2 \"x\" \$1}")
   fi
-  if ! [ "$CONFIG_IMAGE_RENDERER" = "icat" ] && [ -z "$KITTY_WINDOW_ID" ] && [ "$((FZF_PREVIEW_TOP + FZF_PREVIEW_LINES))" -eq "$(stty size </dev/tty | awk "{print \$1}")" ]; then
+  if [ "$CLI_PLATFORM" != "windows" ] && ! [ "$CONFIG_IMAGE_RENDERER" = "icat" ] && [ -z "$KITTY_WINDOW_ID" ] && [ "$((FZF_PREVIEW_TOP + FZF_PREVIEW_LINES))" -eq "$(stty size </dev/tty | awk "{print \$1}")" ]; then
     dim=${FZF_PREVIEW_COLUMNS}x$((FZF_PREVIEW_LINES - 1))
   fi
 
