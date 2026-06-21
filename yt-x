@@ -1785,9 +1785,9 @@ _preview_fzf() {
   data_to_preview="$1"
 
   if [ "$CONFIG_ENABLE_PREVIEW" = "true" ]; then
-    _preview_fzf_generate_script "$data_to_preview" &
+    _preview_fzf_generate_script "$data_to_preview" >/dev/null 2>&1 </dev/null &
     if [ "$CONFIG_ENABLE_PREVIEW_IMAGES" = "true" ]; then
-      _preview_fzf_download_imgs "$data_to_preview" &
+      _preview_fzf_download_imgs "$data_to_preview" >/dev/null 2>&1 </dev/null &
     fi
   fi
 }
