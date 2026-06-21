@@ -1689,18 +1689,18 @@ fi
 
 draw_divider
 
-title="\$(printf $title | fold -s -w "\$FZF_PREVIEW_COLUMNS")"
+title="\$(printf '%s' $title | fold -s -w "\$FZF_PREVIEW_COLUMNS")"
 printf "${THEME_FZF_PREVIEW_TITLE}%s${THEME_FZF_PREVIEW_TITLE}\n" "\$title"
 
 draw_divider
 
 if ! [ $channel = "null" ];then
-channel="\$(printf $channel | fold -s -w \$FZF_PREVIEW_COLUMNS)"
+channel="\$(printf '%s' $channel | fold -s -w \$FZF_PREVIEW_COLUMNS)"
 printf "${THEME_FZF_PREVIEW_KEY}${THEME_BOLD}${TXT_FZF_PREVIEW_CHANNEL}: ${THEME_RESET}%s\n" "${THEME_FZF_PREVIEW_VALUE}\$channel${THEME_RESET}";
 fi
 
 if ! [ "$channel_follower_count" = "null" ];then
-channel_follower_count="\$(printf "$channel_follower_count" | fold -s -w \$FZF_PREVIEW_COLUMNS)"
+channel_follower_count="\$(printf '%s' "$channel_follower_count" | fold -s -w \$FZF_PREVIEW_COLUMNS)"
 printf "${THEME_FZF_PREVIEW_KEY}${THEME_BOLD}${TXT_FZF_PREVIEW_CHANNEL_FOLLOWERS}: ${THEME_RESET}%s\n" "${THEME_FZF_PREVIEW_VALUE}\$channel_follower_count${THEME_RESET}";
 fi
 
@@ -1709,22 +1709,22 @@ draw_divider
 fi
 
 if ! [ "$duration" = "null" ];then
-duration="\$(printf "$duration" | fold -s -w \$FZF_PREVIEW_COLUMNS)"
+duration="\$(printf '%s' "$duration" | fold -s -w \$FZF_PREVIEW_COLUMNS)"
 printf "${THEME_FZF_PREVIEW_KEY}${THEME_BOLD}${TXT_FZF_PREVIEW_DURATION}: ${THEME_RESET}%s\n" "${THEME_FZF_PREVIEW_VALUE}\$duration${THEME_RESET}";
 fi
 
 if ! [ "$view_count" = "null" ];then
-view_count="\$(printf "$view_count" | fold -s -w \$FZF_PREVIEW_COLUMNS)"
+view_count="\$(printf '%s' "$view_count" | fold -s -w \$FZF_PREVIEW_COLUMNS)"
 printf "${THEME_FZF_PREVIEW_KEY}${THEME_BOLD}${TXT_FZF_PREVIEW_VIEW_COUNT}: ${THEME_RESET}%s\n" "${THEME_FZF_PREVIEW_VALUE}\$view_count views${THEME_RESET}";
 fi
 
 if ! [ "$live_status" = "null" ];then
-live_status="\$(printf "$live_status" | fold -s -w \$FZF_PREVIEW_COLUMNS)"
+live_status="\$(printf '%s' "$live_status" | fold -s -w \$FZF_PREVIEW_COLUMNS)"
 printf "${THEME_FZF_PREVIEW_KEY}${THEME_BOLD}${TXT_FZF_PREVIEW_LIVE_STATUS}: ${THEME_RESET}%s\n" "${THEME_FZF_PREVIEW_VALUE}\$live_status${THEME_RESET}";
 fi
 
 if ! [ "$timestamp" = "null" ];then
-timestamp="\$(printf "$timestamp" | fold -s -w \$FZF_PREVIEW_COLUMNS)"
+timestamp="\$(printf '%s' "$timestamp" | fold -s -w \$FZF_PREVIEW_COLUMNS)"
 printf "${THEME_FZF_PREVIEW_KEY}${THEME_BOLD}${TXT_FZF_PREVIEW_TIMESTAMP}: ${THEME_RESET}%s\n" "${THEME_FZF_PREVIEW_VALUE}\$timestamp${THEME_RESET}";
 fi
 if ! [ $channel = "null" ] || ! [ "$channel_follower_count" = "null" ] || ! [ "$duration" = "null" ] || ! [ "$view_count" = "null" ] || ! [ "$live_status" = "null" ] || ! [ "$timestamp" = "null" ];then
