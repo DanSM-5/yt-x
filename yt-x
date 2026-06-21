@@ -1244,6 +1244,15 @@ preview_script_path='{1}'
   [ "$multi_select" = "multi" ] && custom_opts="--multi"
   [ -n "$CONFIG_FZF_HEADER" ] && custom_opts="$custom_opts --header-first --header=$CONFIG_FZF_HEADER"
 
+  # On Windows, fzf's full-height mode (--height=100%) uses the tcell renderer,
+  # which cannot display sixel images; any height <100% uses the light renderer
+  # that can. Override height here (command-line wins over FZF_DEFAULT_OPTS) so
+  # the workaround is scoped to the image-preview menu and only when images are
+  # enabled — every other menu keeps the configured height.
+  if [ "$CLI_PLATFORM" = "windows" ] && [ "$CONFIG_ENABLE_PREVIEW_IMAGES" = "true" ]; then
+    custom_opts="$custom_opts --height=99%"
+  fi
+
   # TODO: is there a better way to do this
   local old_ifs
   old_ifs="$IFS"
@@ -1538,7 +1547,16 @@ fzf_preview() {
   elif command -v chafa >/dev/null 2>&1; then
     case "$CLI_PLATFORM" in
     android) chafa -s "$dim" "$file" ;;
-    windows) chafa -f sixel -s "$dim" "$file" ;;
+    windows)
+      # fzf renders the sixel image itself, but only when the output is "clean"
+      # sixel. Without --polite, chafa emits cursor save/restore (DECSC/DECRC) and
+      # other control sequences that confuse fzf's preview redraw, so the image
+      # never appears (the pane stays blank until a scroll forces a redraw).
+      # --polite=on suppresses those sequences and --animate=off avoids animation
+      # control codes. Falls back to symbol art if sixel output fails.
+      chafa -f sixels --colors=full --polite=on --animate=off -s "$dim" "$file" 2>/dev/null ||
+        chafa -s "$dim" --animate=off "$file" 2>/dev/null
+      ;;
     *) chafa -s "$dim" "$file" ;;
     esac
     echo
