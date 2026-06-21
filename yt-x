@@ -1786,9 +1786,15 @@ _preview_fzf() {
   data_to_preview="$1"
 
   if [ "$CONFIG_ENABLE_PREVIEW" = "true" ]; then
-    _preview_fzf_generate_script "$data_to_preview" &
+    # Detach background generation from the inherited pipe to fzf's stdin.
+    # Without redirecting fd 1 (and fd 0/2), these jobs keep the write end of
+    # that pipe open for their whole (slow on MSYS) lifetime, so fzf never sees
+    # EOF on its input and stays in the "loading" state. On native Windows fzf
+    # that loading state breaks arrow-key navigation; with the fds detached fzf
+    # reaches "loaded" immediately while generation continues in the background.
+    _preview_fzf_generate_script "$data_to_preview" >/dev/null 2>&1 </dev/null &
     if [ "$CONFIG_ENABLE_PREVIEW_IMAGES" = "true" ]; then
-      _preview_fzf_download_imgs "$data_to_preview" &
+      _preview_fzf_download_imgs "$data_to_preview" >/dev/null 2>&1 </dev/null &
     fi
   fi
 }
