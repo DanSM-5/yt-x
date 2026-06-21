@@ -1038,6 +1038,13 @@ _util_generate_hash() {
     input=$(cat)
   fi
 
+  # Native Windows jq.exe emits CRLF, so menu lines read via `read` keep a
+  # trailing \r while titles derived from jq's @sh + eval do not. Stripping CR
+  # here keeps both hashes in sync (e.g. the preview script name fzf requests
+  # via {1} vs. the file written to CLI_PREVIEW_SCRIPTS_DIR). Inputs without CR
+  # (URLs, internal strings) are unaffected.
+  input=$(printf '%s' "$input" | tr -d '\r')
+
   if _dep_ch sha256sum; then
     printf "%s" "$input" | sha256sum | awk '{print $1}'
   elif _dep_ch shasum; then
@@ -1176,8 +1183,11 @@ __ui_fzf_launcher() {
   old_ifs="$IFS"
   IFS=" "
 
+  # tr strips CR from the piped list: native Windows jq.exe emits CRLF, so list
+  # lines arrive with a trailing \r that would otherwise contaminate the value
+  # fzf returns as the selection (breaking downstream menu/title comparisons).
   # shellcheck disable=SC2086
-  fzf --prompt="${1}: " $custom_opts
+  tr -d '\r' | fzf --prompt="${1}: " $custom_opts
 
   IFS="$old_ifs"
 }
@@ -1239,8 +1249,10 @@ preview_script_path='{1}'
   old_ifs="$IFS"
   IFS=" "
 
+  # tr strips CR from the piped list (native Windows jq.exe emits CRLF) so the
+  # accepted {2..} field returned by fzf is free of a trailing \r.
   # shellcheck disable=SC2086
-  fzf --prompt="${1}: " --delimiter '|' --with-nth "{2..}" --accept-nth "{2..}" --preview="$preview_script" $custom_opts
+  tr -d '\r' | fzf --prompt="${1}: " --delimiter '|' --with-nth "{2..}" --accept-nth "{2..}" --preview="$preview_script" $custom_opts
 
   IFS="$old_ifs"
 }
