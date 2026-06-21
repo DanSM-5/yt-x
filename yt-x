@@ -1037,6 +1037,8 @@ _util_generate_hash() {
     input=$(cat)
   fi
 
+  input=$(printf '%s' "$input" | tr -d '\r')
+
   if _dep_ch sha256sum; then
     printf "%s" "$input" | sha256sum | awk '{print $1}'
   elif _dep_ch shasum; then
@@ -1176,7 +1178,7 @@ __ui_fzf_launcher() {
   IFS=" "
 
   # shellcheck disable=SC2086
-  fzf --prompt="${1}: " $custom_opts
+  tr -d '\r' | fzf --prompt="${1}: " $custom_opts
 
   IFS="$old_ifs"
 }
@@ -1239,7 +1241,7 @@ preview_script_path='{1}'
   IFS=" "
 
   # shellcheck disable=SC2086
-  fzf --prompt="${1}: " --delimiter '|' --with-nth "{2..}" --accept-nth "{2..}" --preview="$preview_script" $custom_opts
+  tr -d '\r' | fzf --prompt="${1}: " --delimiter '|' --with-nth "{2..}" --accept-nth "{2..}" --preview="$preview_script" $custom_opts
 
   IFS="$old_ifs"
 }
