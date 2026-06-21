@@ -1761,6 +1761,13 @@ __preview_download_image() {
   images_to_download_file="$3"
 
   if ! [ -s "$output_path" ]; then
+    # On Windows the cache path is MSYS-style (/c/Users/...). The native curl
+    # binary doesn't understand it and fails with a write error (exit 23), so
+    # convert it to a native path (C:/Users/...) for the curl --config output.
+    # (chafa already translates /c/... when rendering, so only curl needs this.)
+    if [ "$CLI_PLATFORM" = "windows" ] && command -v cygpath >/dev/null 2>&1; then
+      output_path=$(cygpath -m "$output_path")
+    fi
     printf 'url=%s\n' "$url" >>"$images_to_download_file"
     printf 'output=%s\n' "$output_path" >>"$images_to_download_file"
   fi
