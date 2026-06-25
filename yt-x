@@ -1548,14 +1548,18 @@ fzf_preview() {
     case "$CLI_PLATFORM" in
     android) chafa -s "$dim" "$file" ;;
     windows)
-      # fzf renders the sixel image itself, but only when the output is "clean"
-      # sixel. Without --polite, chafa emits cursor save/restore (DECSC/DECRC) and
-      # other control sequences that confuse fzf's preview redraw, so the image
-      # never appears (the pane stays blank until a scroll forces a redraw).
-      # --polite=on suppresses those sequences and --animate=off avoids animation
-      # control codes. Falls back to symbol art if sixel output fails.
-      chafa -f sixels --colors=full --polite=on --animate=off -s "$dim" "$file" 2>/dev/null ||
-        chafa -s "$dim" --animate=off "$file" 2>/dev/null
+      # fzf renders the sixel image itself, but only with "clean" output:
+      #  --polite=on  suppresses cursor save/restore + wrap/hide-cursor control
+      #               sequences that otherwise confuse fzf's redraw (image never
+      #               appears) or leak into fzf's input as garbage characters.
+      #  --probe=off  stops chafa querying the terminal over /dev/tty; those
+      #               queries race fzf's own tty reads (garbage in the prompt)
+      #               and leave the tty in raw mode if chafa is killed mid-probe
+      #               (which fzf does on every navigation) -> terminal hangs.
+      #  --animate=off avoids animation control codes.
+      # Both branches carry the flags so the symbol-art fallback is clean too.
+      chafa -f sixels --colors=full --polite=on --probe=off --animate=off -s "$dim" "$file" 2>/dev/null ||
+        chafa --polite=on --probe=off --animate=off -s "$dim" "$file" 2>/dev/null
       ;;
     *) chafa -s "$dim" "$file" ;;
     esac
@@ -1590,6 +1594,8 @@ __preview_fzf_generate_script_for_item() {
   local preview_script_path
   local script
   local img_url
+  local sixel_path
+  local image_preview_block
 
   data_item="$1"
 
@@ -1676,6 +1682,19 @@ __preview_fzf_generate_script_for_item() {
   esac
 
   image_path="$CLI_PREVIEW_IMGS_DIR/$(printf "%s" "$img_url" | _util_generate_hash).jpg"
+  sixel_path="${image_path%.jpg}.sixel"
+
+  # Build the per-item image-preview block. On Windows the preview must NOT spawn
+  # a native console app (chafa) per navigation — doing so corrupts fzf's ConPTY
+  # input (arrows stop responding, escape bytes leak into the query as garbage).
+  # Instead the detached download worker pre-renders each image to a ".sixel"
+  # cache and here we just `cat` it (cat is MSYS, no native spawn). Other
+  # platforms render live with chafa/icat as before.
+  if [ "$CLI_PLATFORM" = "windows" ]; then
+    image_preview_block="if [ -s \"$sixel_path\" ];then cat \"$sixel_path\"; else printf '%s\n' \"$TXT_FZF_PREVIEW_IMAGE_LOADING\"; fi"
+  else
+    image_preview_block="if [ -s \"$image_path\" ];then fzf_preview \"$image_path\" 2>/dev/null; else printf '%s\n' \"$TXT_FZF_PREVIEW_IMAGE_LOADING\"; fi"
+  fi
 
   cat <<EOF >"$preview_script_path"
 #!/usr/bin/env sh
@@ -1697,11 +1716,7 @@ else
 fi
 
 if [ '$CONFIG_ENABLE_PREVIEW_IMAGES' = 'true' ];then
-  if [ -s "$image_path" ];then
-    fzf_preview "$image_path" 2>/dev/null;
-  else
-    printf '%s\n' "$TXT_FZF_PREVIEW_IMAGE_LOADING";
-  fi
+  $image_preview_block
 fi
 
 
@@ -1774,30 +1789,176 @@ __preview_download_image() {
   local url
   local output_path
   local images_to_download_file
+  local render_manifest
+  local native_path
   url="$1"
   output_path="$2"
   images_to_download_file="$3"
+  render_manifest="$4"
+
+  # On Windows the cache path is MSYS-style (/c/Users/...). The native curl
+  # binary doesn't understand it and fails with a write error (exit 23), so
+  # convert it to a native path (C:/Users/...) for the curl --config output and
+  # the render manifest. (chafa also accepts the native path when rendering.)
+  native_path="$output_path"
+  if [ "$CLI_PLATFORM" = "windows" ] && command -v cygpath >/dev/null 2>&1; then
+    native_path=$(cygpath -m "$output_path")
+  fi
+
+  # Record every image (native path) in the render manifest so the worker can
+  # pre-render a sixel cache for it — even images already downloaded by a prior
+  # search, which are NOT added to the download config below.
+  [ -n "$render_manifest" ] && printf '%s\n' "$native_path" >>"$render_manifest"
 
   if ! [ -s "$output_path" ]; then
-    # On Windows the cache path is MSYS-style (/c/Users/...). The native curl
-    # binary doesn't understand it and fails with a write error (exit 23), so
-    # convert it to a native path (C:/Users/...) for the curl --config output.
-    # (chafa already translates /c/... when rendering, so only curl needs this.)
-    if [ "$CLI_PLATFORM" = "windows" ] && command -v cygpath >/dev/null 2>&1; then
-      output_path=$(cygpath -m "$output_path")
-    fi
+    # Download to a temporary ".part" file and rename to the final path only
+    # once curl finishes (see _preview_fzf_download_imgs / _preview_rofi). curl
+    # writes its output incrementally, so a preview that fires mid-download would
+    # otherwise see a non-empty-but-truncated JPEG ([ -s ] is true) and feed it
+    # to chafa, which emits an unterminated sixel DCS sequence and wedges the
+    # terminal. Renaming makes the final file appear only when it is whole.
     printf 'url=%s\n' "$url" >>"$images_to_download_file"
-    printf 'output=%s\n' "$output_path" >>"$images_to_download_file"
+    printf 'output=%s.part\n' "$native_path" >>"$images_to_download_file"
+  fi
+}
+
+# Rename the completed ".part" downloads listed in an images-to-download config
+# to their final paths. Skips entries curl failed to fetch (empty .part), so the
+# final cache file only ever exists fully written.
+__preview_finalize_downloads() {
+  local images_to_download_file
+  local part
+  local line
+  images_to_download_file="$1"
+
+  while IFS= read -r line; do
+    case "$line" in
+    output=*)
+      part="${line#output=}"
+      [ -s "$part" ] && mv -f "$part" "${part%.part}" 2>/dev/null
+      ;;
+    esac
+  done <"$images_to_download_file"
+}
+
+# Download every image listed in a curl --config file, then promote the
+# completed ".part" files to their final names and remove the config. Runs
+# synchronously; used by the rofi path (which needs the files present before it
+# renders) and as the non-Windows fzf path.
+__preview_download_and_finalize() {
+  local images_to_download_file
+  images_to_download_file="$1"
+  curl -sL --parallel --parallel-max 5 --config "$images_to_download_file" >/dev/null 2>&1
+  __preview_finalize_downloads "$images_to_download_file"
+  rm "$images_to_download_file" 2>/dev/null
+}
+
+# Fetch (and on Windows, pre-render) the images for the fzf preview window.
+#
+# On Windows, spawning a native console program while fzf is up corrupts fzf's
+# ConPTY input — arrow keys stop responding and their escape bytes leak into the
+# query as garbage. Both curl (download, native mingw) and chafa (sixel render,
+# native) are such programs, and chafa was historically run on EVERY preview
+# navigation. So on Windows the whole image pipeline runs in a FULLY DETACHED
+# process with its own hidden console: it downloads each thumbnail, promotes the
+# ".part" file, and pre-renders it to a ".sixel" cache that the generated preview
+# script merely `cat`s (cat is MSYS, no native spawn). Nothing native ever runs
+# on fzf's console, so navigation stays responsive while images load.
+#
+# The detached process is launched via WScript (a GUI-subsystem host that never
+# attaches to a console), falling back to PowerShell Start-Process, then to a
+# synchronous run as a last resort. Other platforms download synchronously and
+# render live with chafa per preview (no ConPTY issue there).
+__preview_run_curl() {
+  local images_to_download_file
+  local render_manifest
+  local worker
+  local vbs
+  local size
+  local dims
+  local bash_win
+  local worker_arg
+  local cfg_arg
+  local manifest_arg
+  local vbs_arg
+  images_to_download_file="$1"
+  render_manifest="$2"
+
+  if [ "$CLI_PLATFORM" != "windows" ] || ! command -v cygpath >/dev/null 2>&1; then
+    __preview_download_and_finalize "$images_to_download_file"
+    return
+  fi
+
+  # Estimate the preview pane size for pre-rendering: the preview window is 35%
+  # wide and full height. fzf's exact FZF_PREVIEW_COLUMNS/LINES aren't known
+  # outside a live preview, so approximate from the terminal size.
+  size=$(stty size </dev/tty 2>/dev/null) || size=""
+  if [ -n "$size" ]; then
+    dims="$(( ${size#* } * 35 / 100 ))x${size% *}"
+  else
+    dims="40x25"
+  fi
+
+  worker="${images_to_download_file}.worker.sh"
+  vbs="${images_to_download_file}.launch.vbs"
+  cat <<'WORKER_EOF' >"$worker"
+#!/usr/bin/env sh
+# Detached Windows image worker (see __preview_run_curl). Runs in its own hidden
+# console, so neither curl nor chafa touches fzf's console. It downloads the
+# missing thumbnails (cfg), promotes their ".part" files, then pre-renders a
+# ".sixel" cache for EVERY preview image (manifest) — including ones already
+# cached from a prior search — and cleans up after itself. The preview script
+# just `cat`s the cache, so no native program runs on fzf's console.
+cfg="$1"; manifest="$2"; dims="$3"; vbs="$4"
+[ -s "$cfg" ] && curl -sL --parallel --parallel-max 5 --config "$cfg" </dev/null >/dev/null 2>&1
+[ -f "$cfg" ] && while IFS= read -r line; do
+  case "$line" in
+  output=*) part="${line#output=}"; [ -s "$part" ] && mv -f "$part" "${part%.part}" 2>/dev/null ;;
+  esac
+done <"$cfg"
+[ -f "$manifest" ] && while IFS= read -r jpg; do
+  [ -s "$jpg" ] || continue
+  sx="${jpg%.jpg}.sixel"
+  chafa -f sixels --colors=full --polite=on --probe=off --animate=off -s "$dims" "$jpg" >"$sx.part" 2>/dev/null
+  mv -f "$sx.part" "$sx" 2>/dev/null
+done <"$manifest"
+rm -f "$cfg" "$manifest" "$vbs" "$0"
+WORKER_EOF
+
+  bash_win=$(cygpath -w "$(command -v bash)")
+  worker_arg=$(cygpath -m "$worker")
+  cfg_arg=$(cygpath -m "$images_to_download_file")
+  manifest_arg=$(cygpath -m "$render_manifest")
+  vbs_arg=$(cygpath -m "$vbs")
+
+  if command -v wscript >/dev/null 2>&1; then
+    # WScript.Shell.Run(cmd, 0 = hidden, False = don't wait): launches the worker
+    # fully detached, returns instantly, and never attaches to fzf's console.
+    printf 'CreateObject("WScript.Shell").Run """%s"" ""%s"" ""%s"" ""%s"" ""%s"" ""%s""", 0, False' \
+      "$bash_win" "$worker_arg" "$cfg_arg" "$manifest_arg" "$dims" "$vbs_arg" >"$vbs"
+    wscript "$(cygpath -w "$vbs")" >/dev/null 2>&1 </dev/null
+  elif command -v powershell >/dev/null 2>&1; then
+    rm -f "$vbs" 2>/dev/null
+    powershell -NoProfile -Command "Start-Process -FilePath '$bash_win' -ArgumentList '$worker_arg','$cfg_arg','$manifest_arg','$dims','$vbs_arg' -WindowStyle Hidden" >/dev/null 2>&1 </dev/null
+  else
+    # Last resort: no detacher available. Runs attached (may briefly disturb
+    # input) but keeps images working.
+    rm -f "$vbs" 2>/dev/null
+    bash "$worker" "$images_to_download_file" "$render_manifest" "$dims" "$vbs" >/dev/null 2>&1 </dev/null
   fi
 }
 
 _preview_fzf_download_imgs() {
   local data_to_preview
   local images_to_download_file
+  local render_manifest
   local url
   local output_path
   images_to_download_file="$CLI_CURRENT_STATE_DIR/images-to-download-$(date +%s)"
+  render_manifest="$CLI_CURRENT_STATE_DIR/images-to-render-$(date +%s)"
   data_to_preview="$1"
+  : >"$images_to_download_file"
+  : >"$render_manifest"
 
   printf "%s" "$data_to_preview" | jq -r '.entries[].thumbnails[-1].url' | while IFS= read -r url; do
     case "$url" in
@@ -1805,9 +1966,11 @@ _preview_fzf_download_imgs() {
     esac
 
     output_path="$CLI_PREVIEW_IMGS_DIR/$(printf "%s" "$url" | _util_generate_hash).jpg"
-    __preview_download_image "$url" "$output_path" "$images_to_download_file"
+    __preview_download_image "$url" "$output_path" "$images_to_download_file" "$render_manifest"
   done
-  [ -s "$images_to_download_file" ] && curl -sL --parallel --parallel-max 5 --config "$images_to_download_file" >/dev/null 2>&1 && rm "$images_to_download_file" 2>/dev/null
+  if [ -s "$images_to_download_file" ] || [ -s "$render_manifest" ]; then
+    __preview_run_curl "$images_to_download_file" "$render_manifest"
+  fi
 }
 
 _preview_fzf() {
@@ -1873,7 +2036,9 @@ _preview_rofi() {
       fi
     done >"$output"
 
-    [ -s "$images_to_download_file" ] && curl -sL --parallel --parallel-max 5 --config "$images_to_download_file" >/dev/null 2>&1 && rm "$images_to_download_file" 2>/dev/null
+    if [ -s "$images_to_download_file" ]; then
+      __preview_download_and_finalize "$images_to_download_file"
+    fi
 
     input_count=$(printf "%s" "$input_titles" | wc -l)
     output_count=$(wc -l <"$output")
