@@ -2670,7 +2670,7 @@ _remove_saved_playlist() {
   playlist_id=$(printf '%s' "$STATE_CURRENT_PLAYLIST_URL" | sed 's/.*list=//g')
 
   printf '%s' "$custom_playlists" |
-    jq --arg id "$playlist_id" 'select(.id != $id)' >"$CLI_CUSTOM_PLAYLISTS_FILE"
+    jq --arg id "$playlist_id" '[.[] | select(.id != $id)]' >"$CLI_CUSTOM_PLAYLISTS_FILE"
 }
 
 _get_search_history_entry() {
