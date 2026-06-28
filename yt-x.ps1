@@ -21,14 +21,17 @@
 # ==============================================================================
 # META
 # ==============================================================================
-$CLI_NAME = 'yt-x'
+$CLI_NAME = 'yt-x.ps1'
 $CLI_ARGS = $args
 $CLI_APP_NAME = $env:YT_X_APP_NAME ?? $CLI_NAME
+# NOTE: CLI_VERSION tracks the upstream Benexl/yt-x version so update checks can
+# tell whether this port carries the latest upstream changes. The repo/version/
+# release URLs point at the DanSM-5/yt-x fork that hosts this PowerShell port.
 $CLI_VERSION = '0.8.6'
 $CLI_AUTHOR = 'Benexl'
-$CLI_REPO_URL = 'https://github.com/Benexl/yt-x'
-$CLI_VERSION_URL = 'https://raw.githubusercontent.com/Benexl/yt-x/refs/heads/master/version.txt'
-$CLI_RELEASES_BASE = 'https://github.com/Benexl/yt-x/releases/download'
+$CLI_REPO_URL = 'https://github.com/DanSM-5/yt-x'
+$CLI_VERSION_URL = 'https://raw.githubusercontent.com/DanSM-5/yt-x/refs/heads/master/version.txt'
+$CLI_RELEASES_BASE = 'https://github.com/DanSM-5/yt-x/releases/download'
 $CLI_RELEASE_TAG = "$CLI_RELEASES_BASE/v$CLI_VERSION"
 $CLI_RELEASE_URL = "$CLI_RELEASE_TAG/yt-x"
 
