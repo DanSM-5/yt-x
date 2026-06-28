@@ -676,11 +676,14 @@ Options:
     print bash completions and exit
   --zsh
     print zsh completions and exit
+  --powershell
+    print PowerShell completions and exit
 
 Example:
   $CLI_NAME completions --fish
   $CLI_NAME completions --bash
   $CLI_NAME completions --zsh
+  $CLI_NAME completions --powershell
 "@
 
   $script:TXT_ICON_MENU_MEDIA_ACTIONS_WATCH = ""
@@ -3886,8 +3889,275 @@ complete -c $CLI_NAME -f -n "__fish_use_subcommand" -a completions -d "Generate 
 complete -c $CLI_NAME -n "__fish_seen_subcommand_from completions" -s f -l fish -d "Print fish completions"
 complete -c $CLI_NAME -n "__fish_seen_subcommand_from completions" -s b -l bash -d "Print bash completions"
 complete -c $CLI_NAME -n "__fish_seen_subcommand_from completions" -s z -l zsh -d "Print zsh completions"
+complete -c $CLI_NAME -n "__fish_seen_subcommand_from completions" -s p -l powershell -d "Print PowerShell completions"
 complete -c $CLI_NAME -n "__fish_seen_subcommand_from completions" -s h -l help -d "Show help for completions"
 "@
+
+  exit 0
+}
+
+function _app_completions_bash {
+  $body = @'
+# Bash completions for __CLI_NAME__
+# Install: __CLI_NAME__ completions --bash > /etc/bash_completion.d/__CLI_NAME__
+# or source directly:   source <(__CLI_NAME__ completions --bash)
+_yt_x_complete() {
+    local cur prev words cword
+    if declare -F _init_completion >/dev/null 2>&1; then
+        _init_completion || return
+    else
+        cur="${COMP_WORDS[COMP_CWORD]}"
+        prev="${COMP_WORDS[COMP_CWORD-1]}"
+        words=("${COMP_WORDS[@]}")
+        cword=$COMP_CWORD
+    fi
+
+    local global_opts="-h --help -v --version -e --edit-config -E --generate-desktop-entry -U --update --config-write -l --launcher --preview --no-preview --preview-images --no-preview-images -p --player --mpv-args --vlc-args --tplay-args --disown-player --no-disown-player --rofi-theme-main --rofi-theme-preview --rofi-theme-prompt --rofi-theme-confirm --rofi-theme-pager -x --extension -xargs --extension-arguments -ce --cmd-exit -ps --playlist-skip -me --media-exit --play --play-all --listen --listen-all --download --download-all --download-audio --download-audio-all --save --save-playlist --shell -s --search -sp --search-playlist -sc --search-channel -ss --search-short -sm --search-movie -sv --saved-video -cp --custom-playlist -cc --custom-cmd --feed --subscriptions-feed --watch-later --playlists --custom-playlists --saved --recent --liked --watch-history --clips --new-custom-cmd --custom-cmds --search-history --edit-search-history --edit-custom-playlists --edit-mpv-config --edit-yt-dlp-config --edit-custom-cmds channels completions"
+
+    # Subcommand context is checked FIRST so overloaded short flags resolve right
+    # (-p is --player globally, --playlists in channels, --powershell in completions).
+    local i
+    for i in "${words[@]}"; do
+        case "$i" in
+            channels)
+                case "$prev" in
+                    -n|--name) COMPREPLY=( $(compgen -W "$(jq -r '.entries[].title' "__SUBSCRIPTIONS_FILE__" 2>/dev/null)" -- "$cur") ); return ;;
+                esac
+                COMPREPLY=( $(compgen -W "-n --name -v --videos -f --featured -s --search -p --playlists -sh --shorts -st --streams -po --podcasts -h --help" -- "$cur") )
+                return ;;
+            completions)
+                COMPREPLY=( $(compgen -W "-f --fish -b --bash -z --zsh -p --powershell -h --help" -- "$cur") )
+                return ;;
+        esac
+    done
+
+    case "$prev" in
+        -l|--launcher) COMPREPLY=( $(compgen -W "fzf rofi gum" -- "$cur") ); return ;;
+        -p|--player) COMPREPLY=( $(compgen -W "mpv vlc tplay" -- "$cur") ); return ;;
+        -s|--search) COMPREPLY=( $(compgen -W "$(cat "__SEARCH_HISTORY_FILE__" 2>/dev/null)" -- "$cur") ); return ;;
+        -sv|--saved-video) COMPREPLY=( $(compgen -W "$(jq -r '.entries[].title' "__SAVED_VIDEOS_FILE__" 2>/dev/null)" -- "$cur") ); return ;;
+        -cp|--custom-playlist) COMPREPLY=( $(compgen -W "$(jq -r '.[]?.name' "__CUSTOM_PLAYLISTS_FILE__" 2>/dev/null)" -- "$cur") ); return ;;
+        -cc|--custom-cmd) COMPREPLY=( $(compgen -W "$(jq -r '.[]?.name' "__CUSTOM_CMDS_FILE__" 2>/dev/null)" -- "$cur") ); return ;;
+        -x|--extension) COMPREPLY=( $(compgen -W "$(find "__EXTENSIONS_DIR__" -follow -maxdepth 3 -type f 2>/dev/null | sed "s|__EXTENSIONS_DIR__/||")" -- "$cur") ); return ;;
+        --mpv-args|--vlc-args|--tplay-args|-xargs|--extension-arguments|--rofi-theme-main|--rofi-theme-preview|--rofi-theme-prompt|--rofi-theme-confirm|--rofi-theme-pager) return ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "$global_opts" -- "$cur") )
+}
+complete -F _yt_x_complete __CLI_NAME__
+'@
+
+  Write-Output (($body -replace '__CLI_NAME__', $CLI_NAME) `
+      -replace '__SEARCH_HISTORY_FILE__', $CLI_SEARCH_HISTORY_FILE `
+      -replace '__SAVED_VIDEOS_FILE__', $CLI_SAVED_VIDEOS_FILE `
+      -replace '__CUSTOM_PLAYLISTS_FILE__', $CLI_CUSTOM_PLAYLISTS_FILE `
+      -replace '__CUSTOM_CMDS_FILE__', $CLI_CUSTOM_CMDS_FILE `
+      -replace '__SUBSCRIPTIONS_FILE__', $CLI_SUBSCRIPTIONS_FILE `
+      -replace '__EXTENSIONS_DIR__', $CLI_EXTENSIONS_DIR)
+
+  exit 0
+}
+
+function _app_completions_zsh {
+  $body = @'
+#compdef __CLI_NAME__
+# zsh completions for __CLI_NAME__
+# Install: __CLI_NAME__ completions --zsh > "${fpath[1]}/___CLI_NAME__"
+# or source directly:   source <(__CLI_NAME__ completions --zsh)
+_yt_x() {
+    local curcontext="$curcontext" state line
+    typeset -A opt_args
+
+    _arguments -C \
+        '(-h --help)'{-h,--help}'[Show help and exit]' \
+        '(-v --version)'{-v,--version}'[Show version and exit]' \
+        '(-e --edit-config)'{-e,--edit-config}'[Edit config file]' \
+        '(-E --generate-desktop-entry)'{-E,--generate-desktop-entry}'[Print desktop entry info]' \
+        '(-U --update)'{-U,--update}'[Update the script]' \
+        '--config-write[Write current config to file]' \
+        '(-l --launcher)'{-l,--launcher}'[Preferred launcher]:launcher:(fzf rofi gum)' \
+        '--preview[Enable preview window]' \
+        '--no-preview[Disable preview window]' \
+        '--preview-images[Enable image previews]' \
+        '--no-preview-images[Disable image previews]' \
+        '(-p --player)'{-p,--player}'[Media player]:player:(mpv vlc tplay)' \
+        '--mpv-args[Pass custom mpv args]:args:' \
+        '--vlc-args[Pass custom vlc args]:args:' \
+        '--tplay-args[Pass custom tplay args]:args:' \
+        '--disown-player[Disown player]' \
+        '--no-disown-player[Do not disown player]' \
+        '--rofi-theme-main[Rofi main theme path]:file:_files' \
+        '--rofi-theme-preview[Rofi preview theme path]:file:_files' \
+        '--rofi-theme-prompt[Rofi prompt theme path]:file:_files' \
+        '--rofi-theme-confirm[Rofi confirm theme path]:file:_files' \
+        '--rofi-theme-pager[Rofi pager theme path]:file:_files' \
+        '(-x --extension)'{-x,--extension}'[Load extension]:extension:_files -W __EXTENSIONS_DIR__' \
+        '--play[Watch selected video]' \
+        '--play-all[Play whole playlist]' \
+        '--listen[Listen to selected video]' \
+        '--listen-all[Listen to whole playlist]' \
+        '--download[Download selected video]' \
+        '--download-all[Download whole playlist (video)]' \
+        '--download-audio[Download audio only]' \
+        '--download-audio-all[Download whole playlist as audio]' \
+        '--save[Save video to saved list]' \
+        '--save-playlist[Save playlist to custom list]' \
+        '--shell[Open subshell with context]' \
+        '(-s --search)'{-s,--search}'[Search for videos]:query:' \
+        '(-sp --search-playlist)'{-sp,--search-playlist}'[Search for playlists]:query:' \
+        '(-sc --search-channel)'{-sc,--search-channel}'[Search for channels]:query:' \
+        '(-ss --search-short)'{-ss,--search-short}'[Search for shorts]:query:' \
+        '(-sm --search-movie)'{-sm,--search-movie}'[Search for movies]:query:' \
+        '(-sv --saved-video)'{-sv,--saved-video}'[Open a saved video]:title:' \
+        '(-cp --custom-playlist)'{-cp,--custom-playlist}'[Open a custom playlist]:name:' \
+        '(-cc --custom-cmd)'{-cc,--custom-cmd}'[Run a custom command]:name:' \
+        '--feed[Open your personalised feed]' \
+        '--subscriptions-feed[Latest videos from subscriptions]' \
+        '--watch-later[Open Watch Later playlist]' \
+        '--playlists[Show saved YouTube playlists]' \
+        '--custom-playlists[Browse custom playlists]' \
+        '--saved[Open saved videos]' \
+        '--recent[Show recently watched videos]' \
+        '--liked[Open Liked Videos playlist]' \
+        '--watch-history[Show watch history]' \
+        '--clips[Browse your clips]' \
+        '--new-custom-cmd[Create a new custom command]' \
+        '--custom-cmds[Execute an existing custom command]' \
+        '--search-history[Show search history]' \
+        '--edit-search-history[Edit search history file]' \
+        '--edit-custom-playlists[Edit custom playlists file]' \
+        '--edit-mpv-config[Edit mpv configuration]' \
+        '--edit-yt-dlp-config[Edit yt-dlp configuration]' \
+        '--edit-custom-cmds[Edit custom commands file]' \
+        '1: :->cmds' \
+        '*:: :->args'
+
+    case $state in
+        cmds)
+            _values 'command' \
+                'channels[Browse or search within a specific channel]' \
+                'completions[Generate shell completions]'
+            ;;
+        args)
+            case $line[1] in
+                channels)
+                    _arguments \
+                        '(-n --name)'{-n,--name}'[Channel name]:name:' \
+                        '(-v --videos)'{-v,--videos}'[List channel videos]' \
+                        '(-f --featured)'{-f,--featured}'[Show featured playlists]' \
+                        '(-s --search)'{-s,--search}'[Search within channel]:query:' \
+                        '(-p --playlists)'{-p,--playlists}'[List channel playlists]' \
+                        '(-sh --shorts)'{-sh,--shorts}'[Show channel shorts]' \
+                        '(-st --streams)'{-st,--streams}'[Show live streams]' \
+                        '(-po --podcasts)'{-po,--podcasts}'[Show channel podcasts]' \
+                        '(-h --help)'{-h,--help}'[Show help]'
+                    ;;
+                completions)
+                    _arguments \
+                        '(-f --fish)'{-f,--fish}'[Print fish completions]' \
+                        '(-b --bash)'{-b,--bash}'[Print bash completions]' \
+                        '(-z --zsh)'{-z,--zsh}'[Print zsh completions]' \
+                        '(-p --powershell)'{-p,--powershell}'[Print PowerShell completions]' \
+                        '(-h --help)'{-h,--help}'[Show help]'
+                    ;;
+            esac
+            ;;
+    esac
+}
+# Works both when autoloaded from $fpath and when sourced (source <(... --zsh))
+if [ "$funcstack[1]" = "_yt_x" ]; then
+    _yt_x "$@"
+else
+    compdef _yt_x __CLI_NAME__
+fi
+'@
+
+  Write-Output (($body -replace '__CLI_NAME__', $CLI_NAME) `
+      -replace '__EXTENSIONS_DIR__', $CLI_EXTENSIONS_DIR)
+
+  exit 0
+}
+
+function _app_completions_powershell {
+  $body = @'
+# PowerShell completions for __CLI_NAME__
+# Install: add to $PROFILE, or run once per session:
+#   __CLI_NAME__ completions --powershell | Out-String | Invoke-Expression
+Register-ArgumentCompleter -CommandName '__CLI_NAME__' -Native -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+
+    $files = @{
+        search  = '__SEARCH_HISTORY_FILE__'
+        saved   = '__SAVED_VIDEOS_FILE__'
+        cplists = '__CUSTOM_PLAYLISTS_FILE__'
+        ccmds   = '__CUSTOM_CMDS_FILE__'
+        subs    = '__SUBSCRIPTIONS_FILE__'
+        extdir  = '__EXTENSIONS_DIR__'
+    }
+
+    $tokens = @($commandAst.CommandElements | ForEach-Object { $_.ToString() })
+    $prev = if ($tokens.Count -ge 1) { $tokens[-1] } else { '' }
+    if ($wordToComplete -and $tokens.Count -ge 2) { $prev = $tokens[-2] }
+
+    function _vals($items) {
+        $items | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+    }
+    function _json_titles($f) { try { (Get-Content -Raw -LiteralPath $f | ConvertFrom-Json).entries.title } catch { @() } }
+    function _json_names($f)  { try { (Get-Content -Raw -LiteralPath $f | ConvertFrom-Json).name } catch { @() } }
+    function _lines($f)       { try { Get-Content -LiteralPath $f } catch { @() } }
+
+    # Subcommand context is checked FIRST so overloaded short flags resolve right
+    # (-p is --player globally, --playlists in channels, --powershell in completions).
+    if ($tokens -contains 'channels') {
+        if ($prev -in '-n', '--name') { return _vals (_json_titles $files.subs) }
+        return _vals @('-n', '--name', '-v', '--videos', '-f', '--featured', '-s', '--search', '-p', '--playlists', '-sh', '--shorts', '-st', '--streams', '-po', '--podcasts', '-h', '--help')
+    }
+    if ($tokens -contains 'completions') {
+        return _vals @('-f', '--fish', '-b', '--bash', '-z', '--zsh', '-p', '--powershell', '-h', '--help')
+    }
+
+    switch -Regex ($prev) {
+        '^(-l|--launcher)$' { return _vals @('fzf', 'rofi', 'gum') }
+        '^(-p|--player)$'   { return _vals @('mpv', 'vlc', 'tplay') }
+        '^(-s|--search)$'   { return _vals (_lines $files.search) }
+        '^(-sv|--saved-video)$'     { return _vals (_json_titles $files.saved) }
+        '^(-cp|--custom-playlist)$' { return _vals (_json_names $files.cplists) }
+        '^(-cc|--custom-cmd)$'      { return _vals (_json_names $files.ccmds) }
+        '^(-x|--extension)$' {
+            return _vals (@(try { Get-ChildItem -LiteralPath $files.extdir -File -Recurse -Depth 2 -ErrorAction SilentlyContinue |
+                ForEach-Object { $_.FullName.Substring($files.extdir.Length).TrimStart('/', '\') } } catch { @() }))
+        }
+    }
+
+    _vals @(
+        '-h', '--help', '-v', '--version', '-e', '--edit-config', '-E', '--generate-desktop-entry',
+        '-U', '--update', '--config-write', '-l', '--launcher', '--preview', '--no-preview',
+        '--preview-images', '--no-preview-images', '-p', '--player', '--mpv-args', '--vlc-args',
+        '--tplay-args', '--disown-player', '--no-disown-player', '--rofi-theme-main',
+        '--rofi-theme-preview', '--rofi-theme-prompt', '--rofi-theme-confirm', '--rofi-theme-pager',
+        '-x', '--extension', '-xargs', '--extension-arguments', '-ce', '--cmd-exit', '-ps', '--playlist-skip',
+        '-me', '--media-exit', '--play', '--play-all', '--listen', '--listen-all', '--download',
+        '--download-all', '--download-audio', '--download-audio-all', '--save', '--save-playlist',
+        '--shell', '-s', '--search', '-sp', '--search-playlist', '-sc', '--search-channel', '-ss',
+        '--search-short', '-sm', '--search-movie', '-sv', '--saved-video', '-cp', '--custom-playlist',
+        '-cc', '--custom-cmd', '--feed', '--subscriptions-feed', '--watch-later', '--playlists',
+        '--custom-playlists', '--saved', '--recent', '--liked', '--watch-history', '--clips',
+        '--new-custom-cmd', '--custom-cmds', '--search-history', '--edit-search-history',
+        '--edit-custom-playlists', '--edit-mpv-config', '--edit-yt-dlp-config', '--edit-custom-cmds',
+        'channels', 'completions'
+    )
+}
+'@
+
+  Write-Output (($body -replace '__CLI_NAME__', $CLI_NAME) `
+      -replace '__SEARCH_HISTORY_FILE__', $CLI_SEARCH_HISTORY_FILE `
+      -replace '__SAVED_VIDEOS_FILE__', $CLI_SAVED_VIDEOS_FILE `
+      -replace '__CUSTOM_PLAYLISTS_FILE__', $CLI_CUSTOM_PLAYLISTS_FILE `
+      -replace '__CUSTOM_CMDS_FILE__', $CLI_CUSTOM_CMDS_FILE `
+      -replace '__SUBSCRIPTIONS_FILE__', $CLI_SUBSCRIPTIONS_FILE `
+      -replace '__EXTENSIONS_DIR__', $CLI_EXTENSIONS_DIR)
 
   exit 0
 }
@@ -4070,8 +4340,9 @@ function _app_cmd_line_parser {
         if (-not $b) { _app_usage 1 }
         switch ($b) {
           { @('-f', '--fish') -ccontains $_ } { _app_completions_fish }
-          { @('-b', '--bash') -ccontains $_ } { Write-Output "Contribute to $CLI_NAME by writing bash completions"; exit 1 }
-          { @('-z', '--zsh') -ccontains $_ } { Write-Output "Contribute to $CLI_NAME by writing zsh completions"; exit 1 }
+          { @('-b', '--bash') -ccontains $_ } { _app_completions_bash }
+          { @('-z', '--zsh') -ccontains $_ } { _app_completions_zsh }
+          { @('-p', '--powershell') -ccontains $_ } { _app_completions_powershell }
           { @('-h', '--help') -ccontains $_ } { _app_usage_completions }
           default { _app_usage_completions 1 }
         }
