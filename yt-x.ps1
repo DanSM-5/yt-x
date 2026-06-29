@@ -108,7 +108,9 @@ $CLI_AUTO_GEN_PLAYLISTS = "$CLI_CACHE_DIR/generated-playlists"
 $CLI_DOWNLOAD_ARCHIVE_DIR = "$CLI_CACHE_DIR/archives"
 $CLI_LOG_DIR = "$CLI_CACHE_DIR/logs"
 
-$CLI_CONFIG_FILE = "$CLI_CONFIG_DIR/config"
+# config.ps1 (PowerShell), separate from the bash yt-x's shell `config` in the
+# same dir — the port dot-sources this rather than parsing shell syntax.
+$CLI_CONFIG_FILE = "$CLI_CONFIG_DIR/config.ps1"
 $CLI_DEFAULT_THEME_FILE = "$CLI_EXTENSIONS_THEMES_DIR/default.theme"
 $CLI_DEFAULT_LANG_FILE = "$CLI_EXTENSIONS_LANGS_DIR/default.lang"
 $CLI_RECENT_FILE = "$CLI_CONFIG_DIR/recent.json"
@@ -839,6 +841,19 @@ function __post_config_load {
 # ==============================================================================
 # CORE: config
 # ==============================================================================
+# Format one CONFIG_* value as a PowerShell assignment for the generated config.ps1.
+# Multi-line values use a single-quoted here-string; single-line values use a
+# single-quoted string (embedded single quotes doubled). Single-quoting keeps the
+# value literal — no interpolation when the config is dot-sourced.
+function __cfg {
+  param([string]$name)
+  $val = [string](Get-Variable -Name $name -Scope script -ValueOnly -ErrorAction SilentlyContinue)
+  if ($val -match "`n") {
+    return "`$script:$name = @'`n$val`n'@"
+  }
+  "`$script:$name = '" + ($val -replace "'", "''") + "'"
+}
+
 function _print_config {
   @"
 # ===================================================================================
@@ -854,113 +869,113 @@ function _print_config {
 #
 # ===================================================================================
 #
-# !! BE CAREFUL WHAT YOU INCLUDE HERE SINCE THE CONFIG FILE IS SOURCED AS A SCRIPT  !!
-# !! ITS RECOMMENDED TO ONLY DO VARIABLE ASSIGNMENTS AND CONDITIONAL ASSIGNMENTS    !!
-# !! AND DO MORE COMPLEX STUFF USING EXTENSIONS BY CONVENTION                       !!
-# !! Environment variables (export YT_X_VAR=...) override these settings.           !!
+# !! This is the PowerShell config for yt-x.ps1 (SEPARATE from the bash yt-x        !!
+# !! config). It is DOT-SOURCED as a PowerShell script on startup, so each setting  !!
+# !! is a `$script:CONFIG_* assignment. BE CAREFUL WHAT YOU PUT HERE.               !!
+# !! Stick to variable assignments; do more complex things via extensions.          !!
+# !! Environment variables (`$env:YT_X_VAR=...) override these settings.            !!
 #
 # ===================================================================================
 
 # List of extensions to load automatically on startup
-CONFIG_AUTOLOADED_EXTENSIONS="$CONFIG_AUTOLOADED_EXTENSIONS"
+$(__cfg 'CONFIG_AUTOLOADED_EXTENSIONS')
 
 # Enable or disable colored/formatted output
 # Options: true, false (Default: true)
-CONFIG_ENABLE_COLORS="$CONFIG_ENABLE_COLORS"
+$(__cfg 'CONFIG_ENABLE_COLORS')
 
 # The menu launcher tool used for the ui
 # Options: fzf, rofi, gum (Default: fzf)
-CONFIG_LAUNCHER="$CONFIG_LAUNCHER"
+$(__cfg 'CONFIG_LAUNCHER')
 
 # Enable image/video previews within the selector
 # Options: true, false (Default: false)
-CONFIG_ENABLE_PREVIEW="$CONFIG_ENABLE_PREVIEW"
-CONFIG_ENABLE_PREVIEW_IMAGES="$CONFIG_ENABLE_PREVIEW_IMAGES"
+$(__cfg 'CONFIG_ENABLE_PREVIEW')
+$(__cfg 'CONFIG_ENABLE_PREVIEW_IMAGES')
 
 # The tool used to render previews in the terminal
 # Options: chafa, icat, imgcat (Default: chafa)
-CONFIG_IMAGE_RENDERER="$CONFIG_IMAGE_RENDERER"
+$(__cfg 'CONFIG_IMAGE_RENDERER')
 
 # Extra arguments for specific image renderers
-CONFIG_CHAFA_ARGS="$CONFIG_CHAFA_ARGS"
-CONFIG_ICAT_ARGS="$CONFIG_ICAT_ARGS"
-CONFIG_IMGCAT_ARGS="$CONFIG_IMGCAT_ARGS"
+$(__cfg 'CONFIG_CHAFA_ARGS')
+$(__cfg 'CONFIG_ICAT_ARGS')
+$(__cfg 'CONFIG_IMGCAT_ARGS')
 
 # custom opts for yt-dlp
-CONFIG_YT_DLP_OPTS="$CONFIG_YT_DLP_OPTS"
+$(__cfg 'CONFIG_YT_DLP_OPTS')
 
 # The media player used for playback
 # Options: mpv, vlc, tplay (Default: mpv)
-CONFIG_PLAYER="$CONFIG_PLAYER"
+$(__cfg 'CONFIG_PLAYER')
 
 # Extra arguments for specific media players
-CONFIG_MPV_ARGS="$CONFIG_MPV_ARGS"
-CONFIG_VLC_ARGS="$CONFIG_VLC_ARGS"
-CONFIG_TPLAY_ARGS="$CONFIG_TPLAY_ARGS"
+$(__cfg 'CONFIG_MPV_ARGS')
+$(__cfg 'CONFIG_VLC_ARGS')
+$(__cfg 'CONFIG_TPLAY_ARGS')
 
-# Whether to disown the player, process to prevent blocking the UI
+# Whether to disown the player process to prevent blocking the UI
 # options: true, false (Default: false)
-CONFIG_DISOWN_PLAYER="$CONFIG_DISOWN_PLAYER"
+$(__cfg 'CONFIG_DISOWN_PLAYER')
 
 # Maximum number of search results to fetch per page
 # Options: Integer (Default: 30)
-CONFIG_PER_PAGE="$CONFIG_PER_PAGE"
+$(__cfg 'CONFIG_PER_PAGE')
 
 # Browser for yt-dlp to get cookies from
 # passed to --cookies-from-browser yt-dlp option
 # Currently supported browsers are: brave, chrome, chromium, edge, firefox, opera, safari, vivaldi, whale
 # NOTE: this option is entirely dependent on what yt-dlp supports
-CONFIG_BROWSER="$CONFIG_BROWSER"
+$(__cfg 'CONFIG_BROWSER')
 
 # Text editor for manual configuration/metadata editing
-# Options: vim, nano, code ... (Default: `$EDITOR or vi)
-CONFIG_EDITOR="$CONFIG_EDITOR"
+# Options: vim, nano, code ... (Default: `$env:EDITOR or vi)
+$(__cfg 'CONFIG_EDITOR')
 
 # The terminal to use to execute commands that require a terminal
-CONFIG_TERMINAL_EXEC="$CONFIG_TERMINAL_EXEC"
+$(__cfg 'CONFIG_TERMINAL_EXEC')
 
 # Duration in seconds for desktop notifications
-CONFIG_NOTIFICATION_DURATION="$CONFIG_NOTIFICATION_DURATION"
+$(__cfg 'CONFIG_NOTIFICATION_DURATION')
 
 # Directory where downloads are saved
 # Default: $HOME/Videos/$CLI_NAME
-CONFIG_DOWNLOAD_DIR="$CONFIG_DOWNLOAD_DIR"
-CONFIG_DOWNLOADS_ENUMERATE="$CONFIG_DOWNLOADS_ENUMERATE"
+$(__cfg 'CONFIG_DOWNLOAD_DIR')
+$(__cfg 'CONFIG_DOWNLOADS_ENUMERATE')
 
 # Automatically check for script updates on startup
 # Options: true, false (Default: true)
-CONFIG_CHECK_FOR_UPDATES="$CONFIG_CHECK_FOR_UPDATES"
+$(__cfg 'CONFIG_CHECK_FOR_UPDATES')
 
 # Number of items to keep in the recent history
-CONFIG_NO_OF_RECENT="$CONFIG_NO_OF_RECENT"
+$(__cfg 'CONFIG_NO_OF_RECENT')
 
 # Enable or disable saving search queries to history
 # Options: true, false (Default: true)
-CONFIG_ENABLE_SEARCH_HISTORY="$CONFIG_ENABLE_SEARCH_HISTORY"
+$(__cfg 'CONFIG_ENABLE_SEARCH_HISTORY')
 
 # Custom options passed directly to gum
-CONFIG_GUM_OPTS="$CONFIG_GUM_FILTER_OPTS"
-CONFIG_GUM_INPUT_OPTS="$CONFIG_GUM_INPUT_OPTS"
-CONFIG_GUM_PAGER_OPTS="$CONFIG_GUM_PAGER_OPTS"
-CONFIG_GUM_SPIN_OPTS="$CONFIG_GUM_SPIN_OPTS"
-CONFIG_GUM_CONFIRM_OPTS="$CONFIG_GUM_CONFIRM_OPTS"
+$(__cfg 'CONFIG_GUM_FILTER_OPTS')
+$(__cfg 'CONFIG_GUM_INPUT_OPTS')
+$(__cfg 'CONFIG_GUM_PAGER_OPTS')
+$(__cfg 'CONFIG_GUM_SPIN_OPTS')
+$(__cfg 'CONFIG_GUM_CONFIRM_OPTS')
 
 # Custom options passed directly to fzf
-CONFIG_FZF_HEADER="\
-$CONFIG_FZF_HEADER"
-CONFIG_FZF_OPTS="$CONFIG_FZF_OPTS"
+$(__cfg 'CONFIG_FZF_HEADER')
+$(__cfg 'CONFIG_FZF_OPTS')
 
 # Rofi config all are required to run rofi as a launcher
 # get the official ones from $CLI_REPO_URL
-CONFIG_ROFI_THEME_MAIN="$CONFIG_ROFI_THEME_MAIN"
-CONFIG_ROFI_THEME_PREVIEW="$CONFIG_ROFI_THEME_PREVIEW"
-CONFIG_ROFI_THEME_PROMPT="$CONFIG_ROFI_THEME_PROMPT"
-CONFIG_ROFI_THEME_CONFIRM="$CONFIG_ROFI_THEME_CONFIRM"
-CONFIG_ROFI_THEME_PAGER="$CONFIG_ROFI_THEME_PAGER"
+$(__cfg 'CONFIG_ROFI_THEME_MAIN')
+$(__cfg 'CONFIG_ROFI_THEME_PREVIEW')
+$(__cfg 'CONFIG_ROFI_THEME_PROMPT')
+$(__cfg 'CONFIG_ROFI_THEME_CONFIRM')
+$(__cfg 'CONFIG_ROFI_THEME_PAGER')
 
 # Number of days to keep cached preview images, playlists, and logs
 # Default: 3
-CONFIG_CACHE_RETENTION_DAYS="$CONFIG_CACHE_RETENTION_DAYS"
+$(__cfg 'CONFIG_CACHE_RETENTION_DAYS')
 # ==============================================================================
 # 楽しんでね
 # ==============================================================================
@@ -976,15 +991,12 @@ function _load_config {
     [IO.File]::WriteAllText($CLI_CONFIG_FILE, ((_print_config) -replace "`r`n", "`n"), (New-Object Text.UTF8Encoding $false))
   }
 
-  # original: . "$CLI_CONFIG_FILE"
-  # (per port decision: parse the shared shell config's CONFIG_*=… assignments
-  # rather than sourcing it; this overrides the defaults set above)
-  foreach ($line in (Get-Content -LiteralPath $CLI_CONFIG_FILE)) {
-    if ($line -match '^\s*(?:export\s+)?(CONFIG_\w+)\s*=\s*(.*)$') {
-      $v = $Matches[2].Trim() -replace '^"(.*)"$', '$1' -replace "^'(.*)'$", '$1'
-      Set-Variable -Name $Matches[1] -Value $v -Scope script
-    }
-  }
+  # The port uses its OWN PowerShell config (config.ps1), dot-sourced natively —
+  # this restores the original `. "$CLI_CONFIG_FILE"` semantics without parsing
+  # shell syntax. The config sets `$script:CONFIG_*`, overriding the defaults above.
+  # (Dot-sourcing runs in this script's scope, so the `$script:` assignments land
+  # on yt-x.ps1's own variables.)
+  . $CLI_CONFIG_FILE
 
   __load_env_config
   __load_default_lang
