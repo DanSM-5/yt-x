@@ -4376,8 +4376,16 @@ function _app_cmd_line_parser {
 # ==============================================================================
 function main {
   # bash uses `trap _app_runtime_clean_up EXIT INT TERM`; try/finally covers normal
-  # return and terminating errors. The explicit-exit path (_util_byebye) runs the
-  # same cleanup itself before exiting.
+  # return, terminating errors AND `exit` (in pwsh, finally runs on exit).
+  #
+  # `$env:*` assignments are PROCESS-global, not scoped — so when yt-x is run by
+  # name in an interactive pwsh (same process), every env var the app sets
+  # (FZF_DEFAULT_OPTS, the preview-launcher vars, the `shell` menu exports, …)
+  # would leak into that session after it quits. Snapshot the environment up front
+  # and restore it on exit so nothing propagates back to the caller.
+  $__env_snapshot = @{}
+  Get-ChildItem env: | ForEach-Object { $__env_snapshot[$_.Name] = $_.Value }
+
   try {
     _load_config
     _app_cmd_line_parser @args
@@ -4386,6 +4394,14 @@ function main {
     menu_main
   } finally {
     _app_runtime_clean_up
+
+    # restore the environment: drop vars added during the run, revert changed ones
+    foreach ($n in @(Get-ChildItem env: | ForEach-Object Name)) {
+      if (-not $__env_snapshot.ContainsKey($n)) { Remove-Item -LiteralPath "env:$n" -ErrorAction SilentlyContinue }
+    }
+    foreach ($k in $__env_snapshot.Keys) {
+      Set-Item -LiteralPath "env:$k" -Value $__env_snapshot[$k] -ErrorAction SilentlyContinue
+    }
   }
 }
 
