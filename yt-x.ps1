@@ -1174,7 +1174,11 @@ function _ui_launcher {
   }
 }
 
-function ui_launcher { $input | _ui_launcher @args }
+# Coerce to a string so an aborted launcher (Esc -> fzf prints nothing -> $null)
+# returns '' instead of $null. `switch ($null)` would fall through to `default`
+# (re-rendering the menu) instead of matching the ''/Back clause, so menus that
+# switch on the raw result would ignore Esc. '' makes Esc behave like Back.
+function ui_launcher { "$($input | _ui_launcher @args)" }
 
 # ==============================================================================
 # CORE UI: launcher with preview
@@ -1233,7 +1237,7 @@ function _ui_launcher_with_preview {
   }
 }
 
-function ui_launcher_with_preview { $input | _ui_launcher_with_preview @args }
+function ui_launcher_with_preview { "$($input | _ui_launcher_with_preview @args)" }
 
 # ==============================================================================
 # CORE UI: prompt
