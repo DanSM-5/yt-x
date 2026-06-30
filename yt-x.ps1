@@ -63,6 +63,12 @@ elseif ($IsMacOS) { $CLI_PLATFORM = 'mac' }
 elseif ($IsLinux) { $CLI_PLATFORM = 'linux' }
 else { $CLI_PLATFORM = 'linux' }
 
+# Native curl program. On Windows call `curl.exe` explicitly so a (historical)
+# `curl` -> Invoke-WebRequest alias is never hit; elsewhere the binary is `curl`.
+# (All other external tools — fzf, yt-dlp, mpv, vlc, chafa, pwsh — are not aliased,
+# so they are called by bare name and resolve on every platform.)
+$curl_prg = if ($IsWindows) { 'curl.exe' } else { 'curl' }
+
 $CLI_IS_TERMINAL = -not [Console]::IsOutputRedirected
 
 if ($env:COLORTERM -eq 'truecolor' -or $env:COLORTERM -eq '24bit') {
@@ -467,7 +473,7 @@ NOTE: There are base options which are given to yt-dlp but can be overriden
   $script:TXT_UPDATE_FAILED = "Can't update for some reason!"
   $script:TXT_UPDATE_FETCH_FAILED = "Something went wrong fetching the update, can't proceed with the update"
   $script:TXT_UPDATE_FOUND = "An update has been found would you like to see the changes before deciding whether to update?"
-  $script:TXT_DEP_MISSING_DIFF = "Could not find diff in path please install it to view update diffs"
+  $script:TXT_DEP_MISSING_DIFF = "Could not find git in path please install it to view update diffs"
   $script:TXT_UPDATE_CONFIRM = "Would you like to proceed with the update?"
   $script:TXT_UPDATE_NOT_FOUND = "No updates found"
 
@@ -1028,8 +1034,9 @@ function _util_open {
   if (_dep_ch open) { & open $target; return ($LASTEXITCODE -eq 0) }
   elseif (_dep_ch xdg-open) { & xdg-open $target; return ($LASTEXITCODE -eq 0) }
   elseif (_dep_ch wslview) { & wslview $target; return ($LASTEXITCODE -eq 0) }
-  elseif (_dep_ch cmd.exe) {
-    # paths are already native Windows here — no MSYS /c/… (cygpath/wslpath) conversion needed
+  elseif ($IsWindows -and (_dep_ch cmd.exe)) {
+    # Windows-only fallback. cmd.exe is genuinely Windows-specific (keeps the .exe);
+    # paths are already native Windows here — no MSYS /c/… conversion needed.
     & cmd.exe /C start "" "$target" *> $null
     return ($LASTEXITCODE -eq 0)
   } else {
@@ -1091,13 +1098,39 @@ function __ui_notify_terminal {
 
 function __ui_notify_non_terminal {
   param([string]$level, [string]$msg)
-  #TODO: finish implementation
-  switch ($level) {
-    'info' { & notify-send $msg }
-    'warning' { & notify-send $msg }
-    'error' { & notify-send $msg }
-    'critical' { & notify-send $msg; exit 1 }
+
+  $title = $CLI_APP_NAME
+  $sent = $false
+
+  if (Get-Command notify-send -CommandType Application -ErrorAction SilentlyContinue) {
+    if ($IsWindows) {
+      # Windows notify-send signature: notify-send [-i info|important|error] TITLE MESSAGE
+      $i = switch ($level) {
+        'warning' { 'important' }
+        'error' { 'error' }
+        'critical' { 'error' }
+        default { 'info' }
+      }
+      & notify-send -i $i $title $msg
+    } else {
+      # Linux/macOS: notify-send TITLE [BODY] (here -i would be an icon, not a level)
+      & notify-send $title $msg
+    }
+    $sent = $true
+  } elseif ($IsWindows -and (Get-Module -ListAvailable -Name BurntToast)) {
+    # Windows has no built-in toast cmdlet; fall back to the BurntToast module if
+    # the user happens to have it installed (not a hard dependency).
+    try {
+      Import-Module BurntToast -ErrorAction Stop
+      New-BurntToastNotification -Text $title, $msg -ErrorAction Stop
+      $sent = $true
+    } catch { $sent = $false }
   }
+
+  # last resort: write to stderr so the message is never silently dropped
+  if (-not $sent) { [Console]::Error.WriteLine("${title}: $msg") }
+
+  if ($level -eq 'critical') { exit 1 }
 }
 
 function _ui_notify {
@@ -1129,7 +1162,7 @@ function ui_notify_critical { _ui_notify_critical @args }
 # so that logic executes pwsh, not MSYS sh — this is what avoids the Windows
 # ConPTY input corruption. "Simple" fzf calls (pure fuzzy filter, no
 # shell-executing logic) do NOT need it. (Original used fzf's default $SHELL=sh.)
-$FZF_WITH_SHELL = 'pwsh.exe -NoLogo -NonInteractive -NoProfile -Command'
+$FZF_WITH_SHELL = 'pwsh -NoLogo -NonInteractive -NoProfile -Command'
 
 function __ui_gum_launcher {
   $custom_opts = @()
@@ -1149,7 +1182,7 @@ function __ui_fzf_launcher {
   if ($CONFIG_FZF_HEADER) { $custom_opts += @('--header-first', "--header=$CONFIG_FZF_HEADER") }
 
   $input | ForEach-Object { $_ -replace "`r", '' } |
-    fzf.exe --prompt "$($args[0]): " @custom_opts
+    fzf --prompt "$($args[0]): " @custom_opts
 }
 
 function __ui_rofi_launcher {
@@ -1208,7 +1241,7 @@ function __ui_fzf_launcher_with_preview {
   }
 
   $input | ForEach-Object { $_ -replace "`r", '' } |
-    fzf.exe --prompt "$($args[0]): " --delimiter '|' --with-nth '{2..}' --accept-nth '{2..}' --with-shell $FZF_WITH_SHELL --preview $preview_script @custom_opts
+    fzf --prompt "$($args[0]): " --delimiter '|' --with-nth '{2..}' --accept-nth '{2..}' --with-shell $FZF_WITH_SHELL --preview $preview_script @custom_opts
 }
 
 function __ui_rofi_launcher_with_preview {
@@ -1429,35 +1462,35 @@ function fzf_preview {
 
   if ($env:CONFIG_IMAGE_RENDERER -eq 'icat' -and -not $env:GHOSTTY_BIN_DIR) {
     $a = @('icat', '--clear', '--transfer-mode=memory', '--unicode-placeholder', '--stdin=no', "--place=$dim@0x0", $file)
-    if (_dep kitten) { __render 'kitten.exe' $a }
-    elseif (_dep icat) { __render 'icat.exe' ($a | Select-Object -Skip 1) }
-    else { __render 'kitty.exe' $a }
+    if (_dep kitten) { __render 'kitten' $a }
+    elseif (_dep icat) { __render 'icat' ($a | Select-Object -Skip 1) }
+    else { __render 'kitty' $a }
   }
   elseif ($env:GHOSTTY_BIN_DIR) {
     $a = @('icat', '--clear', '--transfer-mode=memory', '--unicode-placeholder', '--stdin=no', "--place=$dim@0x0", $file)
-    if (_dep kitten) { __render 'kitten.exe' $a }
-    elseif (_dep icat) { __render 'icat.exe' ($a | Select-Object -Skip 1) }
-    else { __render 'chafa.exe' @('-s', $dim, $file) }
+    if (_dep kitten) { __render 'kitten' $a }
+    elseif (_dep icat) { __render 'icat' ($a | Select-Object -Skip 1) }
+    else { __render 'chafa' @('-s', $dim, $file) }
   }
   elseif (_dep chafa) {
     switch ($env:CLI_PLATFORM) {
-      'android' { __render 'chafa.exe' @('-s', $dim, $file) }
+      'android' { __render 'chafa' @('-s', $dim, $file) }
       'windows' {
         # sixels, with the symbol-art fallback (original's `|| chafa -s …`)
         $so = [IO.Path]::GetTempFileName(); $se = [IO.Path]::GetTempFileName()
-        Start-Process -NoNewWindow -Wait -FilePath 'chafa.exe' -ArgumentList @('-f', 'sixels', '--colors=full', '--polite=on', '--animate=off', '-s', $dim, $file) -RedirectStandardOutput $so -RedirectStandardError $se -ErrorAction SilentlyContinue
+        Start-Process -NoNewWindow -Wait -FilePath 'chafa' -ArgumentList @('-f', 'sixels', '--colors=full', '--polite=on', '--animate=off', '-s', $dim, $file) -RedirectStandardOutput $so -RedirectStandardError $se -ErrorAction SilentlyContinue
         if (-not (Test-Path -LiteralPath $so) -or (Get-Item -LiteralPath $so).Length -eq 0) {
-          Start-Process -NoNewWindow -Wait -FilePath 'chafa.exe' -ArgumentList @('-s', $dim, '--animate=off', $file) -RedirectStandardOutput $so -RedirectStandardError $se -ErrorAction SilentlyContinue
+          Start-Process -NoNewWindow -Wait -FilePath 'chafa' -ArgumentList @('-s', $dim, '--animate=off', $file) -RedirectStandardOutput $so -RedirectStandardError $se -ErrorAction SilentlyContinue
         }
         __emit_raw $so
         Remove-Item -Force $so, $se -ErrorAction SilentlyContinue
       }
-      default { __render 'chafa.exe' @('-s', $dim, $file) }
+      default { __render 'chafa' @('-s', $dim, $file) }
     }
     EmitLine ''
   }
   elseif (_dep imgcat) {
-    __render 'imgcat.exe' @('-W', ($dim -split 'x')[0], '-H', ($dim -split 'x')[1], $file)
+    __render 'imgcat' @('-W', ($dim -split 'x')[0], '-H', ($dim -split 'x')[1], $file)
   }
   else {
     Emit $env:TXT_PREVIEW_INSTALL_VIEWER
@@ -1636,9 +1669,6 @@ function _preview_fzf_generate_script {
 function __preview_download_image {
   param([string]$url, [string]$output_path, [string]$images_to_download_file)
 
-  # NOTE: the original converts MSYS paths with `cygpath -m` here because the
-  # Windows-shipped curl.exe cannot write to /c/... paths. This port uses native
-  # forward-slash Windows paths throughout, so no conversion is needed.
   if (-not (Test-Path -LiteralPath $output_path) -or (Get-Item -LiteralPath $output_path).Length -eq 0) {
     Add-Content -LiteralPath $images_to_download_file -Value "url=$url"
     Add-Content -LiteralPath $images_to_download_file -Value "output=$output_path"
@@ -1661,7 +1691,7 @@ function _preview_fzf_download_imgs {
   }
 
   if ((Test-Path -LiteralPath $images_to_download_file) -and (Get-Item -LiteralPath $images_to_download_file).Length -gt 0) {
-    & curl.exe -sL --parallel --parallel-max 5 --config $images_to_download_file *> $null
+    & $curl_prg -sL --parallel --parallel-max 5 --config $images_to_download_file *> $null
     Remove-Item -LiteralPath $images_to_download_file -ErrorAction SilentlyContinue
   }
 }
@@ -1679,7 +1709,7 @@ function __run_disowned {
   [IO.File]::WriteAllText($datafile, $data, [Text.UTF8Encoding]::new($false))
 
   $cmd = "`$env:YTX_SOURCED='1'; . '$PSCommandPath'; _load_config *> `$null; $func (Get-Content -Raw -LiteralPath '$datafile'); Remove-Item -LiteralPath '$datafile' -ErrorAction SilentlyContinue"
-  Start-Process -FilePath 'pwsh.exe' -WindowStyle Hidden -ArgumentList @(
+  Start-Process -FilePath 'pwsh' -WindowStyle Hidden -ArgumentList @(
     '-NoLogo', '-NonInteractive', '-NoProfile', '-Command', $cmd
   ) | Out-Null
 }
@@ -1742,7 +1772,7 @@ function _preview_rofi {
     [IO.File]::WriteAllText($output, ($outLines -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
 
     if ((Test-Path -LiteralPath $images_to_download_file) -and (Get-Item -LiteralPath $images_to_download_file).Length -gt 0) {
-      & curl.exe -sL --parallel --parallel-max 5 --config $images_to_download_file *> $null
+      & $curl_prg -sL --parallel --parallel-max 5 --config $images_to_download_file *> $null
       Remove-Item -LiteralPath $images_to_download_file -ErrorAction SilentlyContinue
     }
 
@@ -1886,7 +1916,7 @@ function __number_entry_titles {
 function __fetch_yt_dlp {
   param([string]$url, $playlist_start, $playlist_end)
   $custom_opts = $args
-  ui_load yt-dlp.exe $url `
+  ui_load yt-dlp $url `
     --dump-single-json `
     --flat-playlist `
     --playlist-start $playlist_start `
@@ -1896,27 +1926,27 @@ function __fetch_yt_dlp {
 
 function __fetch_video_url {
   param([string]$url)
-  (ui_load yt-dlp.exe $url --quiet --no-warnings --get-url) | Select-Object -First 1
+  (ui_load yt-dlp $url --quiet --no-warnings --get-url) | Select-Object -First 1
 }
 
 function __fetch_audio_url {
   param([string]$url)
-  (ui_load yt-dlp.exe $url --quiet --no-warnings --get-url) | Select-Object -Last 1
+  (ui_load yt-dlp $url --quiet --no-warnings --get-url) | Select-Object -Last 1
 }
 
 function __fetch_video_info {
   param([string]$url)
-  & yt-dlp.exe --dump-json $url
+  & yt-dlp --dump-json $url
 }
 
 function __fetch_video_info_by_field {
   param([string]$url, [string]$field)
-  & yt-dlp.exe --print $field $url
+  & yt-dlp --print $field $url
 }
 
 function __fetch_video_oembed {
   param([string]$url)
-  & curl.exe -s "https://www.youtube.com/oembed?url=$url&format=json"
+  & $curl_prg -s "https://www.youtube.com/oembed?url=$url&format=json"
 }
 
 function _fetch_media {
@@ -2038,7 +2068,7 @@ function _fetch_yt_subs {
   if (ui_confirm $TXT_MENU_MISC_SYNC_SUBS_CONFIRM) {
     ui_notify $TXT_MENU_MISC_SYNC_SUBS_START
 
-    $channels_data = & yt-dlp.exe 'https://www.youtube.com/feed/channels' --flat-playlist --dump-single-json --cookies-from-browser $CONFIG_BROWSER
+    $channels_data = & yt-dlp 'https://www.youtube.com/feed/channels' --flat-playlist --dump-single-json --cookies-from-browser $CONFIG_BROWSER
     if ($channels_data) {
       [IO.File]::WriteAllText($CLI_SUBSCRIPTIONS_FILE, ($channels_data -join "`n"), [Text.UTF8Encoding]::new($false))
     } else {
@@ -2090,7 +2120,7 @@ function parse_search_filter {
 # ==============================================================================
 function __download_yt_dlp {
   param([string]$url)
-  & yt-dlp.exe $url @args
+  & yt-dlp $url @args
 }
 
 function _download_media {
@@ -2171,7 +2201,7 @@ function __cached_mix_path {
   $cached_mix_path = "$CLI_AUTO_GEN_PLAYLISTS/$(_util_generate_hash "https://www.youtube.com/watch?v=$video_id&list=RD$video_id").m3u8"
 
   if (-not (Test-Path -LiteralPath $cached_mix_path) -or (Get-Item -LiteralPath $cached_mix_path).Length -eq 0) {
-    $_mix_data = "$((& yt-dlp.exe "https://www.youtube.com/watch?v=$video_id&list=RD$video_id" --flat-playlist --dump-single-json 2>$null) -join "`n")"
+    $_mix_data = "$((& yt-dlp "https://www.youtube.com/watch?v=$video_id&list=RD$video_id" --flat-playlist --dump-single-json 2>$null) -join "`n")"
     if (-not $_mix_data) { return $url }
 
     # NOTE: the extended metadata below is not available in the mix data of yt
@@ -2217,7 +2247,6 @@ function __player_mpv {
     if ($mode -eq 'listen') { $opts += @('--no-video', '--force-window=no') }
 
     if (_dep_ch mpv) { $mpv_cmd = 'mpv' }
-    elseif (_dep_ch 'mpv.exe') { $mpv_cmd = 'mpv.exe' }
     else { ui_notify_critical $TXT_PLAYER_NOT_FOUND }
 
     if ($CONFIG_DISOWN_PLAYER -eq 'true') {
@@ -2249,7 +2278,6 @@ function __player_vlc {
     $url = $input_url
 
     if (_dep_ch vlc) { $vlc_cmd = 'vlc' }
-    elseif (_dep_ch 'vlc.exe') { $vlc_cmd = 'vlc.exe' }
     else { ui_notify_critical $TXT_PLAYER_NOT_FOUND }
 
     if ($CONFIG_DISOWN_PLAYER -eq 'true') {
@@ -2534,7 +2562,7 @@ function __menu_media_actions_shell {
   [IO.File]::WriteAllText($txt_file, $init_text, [Text.UTF8Encoding]::new($false))
   [IO.File]::WriteAllText($init_file, "Get-Content -Raw -LiteralPath '$txt_file' | Write-Host", [Text.UTF8Encoding]::new($false))
 
-  _util_terminal_exec pwsh.exe -NoLogo -NoExit -File $init_file
+  _util_terminal_exec pwsh -NoLogo -NoExit -File $init_file
 }
 
 function __menu_media_actions_open_in_browser {
@@ -3672,7 +3700,7 @@ function _app_update_script {
     Remove-Item -LiteralPath $CLI_FZF_PREVIEW_SCRIPT -ErrorAction SilentlyContinue
     if (ui_confirm $TXT_UPDATE_SCRIPT_REEXECUTE) {
       $reArgs = @("$CLI_ARGS" -split '\s+' | Where-Object { $_ })
-      & pwsh.exe -NoProfile -File $CLI_PATH @reArgs
+      & pwsh -NoProfile -File $CLI_PATH @reArgs
       exit $LASTEXITCODE
     } else {
       exit 0
@@ -3683,15 +3711,21 @@ function _app_update_script {
 }
 
 function _app_update_check {
-  $latest_version = "$(& curl.exe -s $CLI_VERSION_URL)"
+  $latest_version = "$(& $curl_prg -s $CLI_VERSION_URL)"
   if (-not $latest_version) { return $false }
 
   if ($latest_version -ne $CLI_VERSION) {
-    $update = "$(& curl.exe -sL "$CLI_RELEASES_BASE/v$latest_version/$CLI_RELEASE_ASSET")"
+    $update = "$(& $curl_prg -sL "$CLI_RELEASES_BASE/v$latest_version/$CLI_RELEASE_ASSET")"
     if (-not $update) { return $false }
 
-    if (_dep_ch diff) {
-      $update_diff = "$update" | & diff -u $CLI_PATH -
+    if (_dep_ch git) {
+      # `diff` is a PowerShell alias for Compare-Object (value-based set comparison,
+      # not a unified diff), so use git's unified diff instead. `--no-index` diffs
+      # two paths outside a repo and exits 1 when they differ (expected here).
+      $new_file = [IO.Path]::GetTempFileName()
+      [IO.File]::WriteAllText($new_file, "$update", (New-Object Text.UTF8Encoding $false))
+      $update_diff = & git --no-pager diff --no-index -- $CLI_PATH $new_file 2>$null
+      Remove-Item -LiteralPath $new_file -ErrorAction SilentlyContinue
       if (ui_confirm $TXT_UPDATE_FOUND) { $update_diff | ui_pager }
     } else {
       _ui_notify_warning $TXT_DEP_MISSING_DIFF
