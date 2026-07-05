@@ -2413,7 +2413,7 @@ __player_mpv() {
       url="$(__fetch_video_url "$1")"
       ;;
     esac
-    nohup am start --user 0 -a android.intent.action.VIEW -d "$url" -n is.xyz.mpv/.MPVActivity >/dev/null 2>&1 &
+    nohup am start --user 0 -a android.intent.action.VIEW -d "$url" -n is.xyz.mpv.ytdl/is.xyz.mpv.MPVActivity >/dev/null 2>&1 &
     ;;
   *)
     url="$1"
@@ -2514,7 +2514,7 @@ __player_tplay() {
       url="$(__fetch_video_url "$1")"
       ;;
     esac
-    nohup am start --user 0 -a android.intent.action.VIEW -d "$url" -n is.xyz.mpv/.MPVActivity >/dev/null 2>&1 &
+    nohup am start --user 0 -a android.intent.action.VIEW -d "$url" -n is.xyz.mpv.ytdl/is.xyz.mpv.MPVActivity >/dev/null 2>&1 &
     ;;
   *)
     url="$1"
