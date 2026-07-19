@@ -1277,6 +1277,13 @@ preview_script_path='{1}'
   [ "$multi_select" = "multi" ] && custom_opts="--multi"
   [ -n "$CONFIG_FZF_HEADER" ] && custom_opts="$custom_opts --header-first --header=$CONFIG_FZF_HEADER"
 
+  if [ "$CLI_PLATFORM" = "windows" ] && [ "$CONFIG_ENABLE_PREVIEW_IMAGES" = "true" ]; then
+    # fzf on windows uses a tcell-base renderer when using --height=100% which does
+    # not render sixel images. Workaround is to use anything <100% to use LightRenderer.
+    # Ref: https://github.com/junegunn/fzf/issues/4065#issuecomment-2439815977
+    custom_opts="$custom_opts --height=99%"
+  fi
+
   # TODO: is there a better way to do this
   local old_ifs
   old_ifs="$IFS"
@@ -2444,7 +2451,10 @@ __player_mpv() {
       ;;
     esac
 
-    nohup am start --user 0 -a android.intent.action.VIEW -d "$url" -n "$activity_name" >/dev/null 2>&1 &
+      
+    if nohup am start --user 0 -a android.intent.action.VIEW -d "$1" -n is.xyz.mpv.ytdl/is.xyz.mpv.MPVActivity >/dev/null 2>&1; then
+      nohup am start --user 0 -a android.intent.action.VIEW -d "$url" -n "$activity_name" >/dev/null 2>&1 &
+    fi
     ;;
   *)
     url="$1"
