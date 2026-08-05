@@ -2438,7 +2438,7 @@ __player_mpv() {
 
   mode="$2"
   opts="$CONFIG_MPV_ARGS"
-  activity_name="${CONFIG_PLAYER_MPV_ANDROID_ACTIVITY_NAME:-is.xyz.mpv/.MPVActivity}"
+  activity_name="${CONFIG_PLAYER_MPV_ANDROID_ACTIVITY_NAME:-is.xyz.mpv.ytdl/is.xyz.mpv.MPVActivity}"
 
   case "$CLI_PLATFORM" in
   android)
@@ -2451,8 +2451,9 @@ __player_mpv() {
       ;;
     esac
 
-      
-    if nohup am start --user 0 -a android.intent.action.VIEW -d "$1" -n is.xyz.mpv.ytdl/is.xyz.mpv.MPVActivity >/dev/null 2>&1; then
+    if printf '%s' "$activity_name" | grep -q 'ytdl'; then
+      nohup am start --user 0 -a android.intent.action.VIEW -d "$1" -n is.xyz.mpv.ytdl/is.xyz.mpv.MPVActivity >/dev/null 2>&1 &
+    else
       nohup am start --user 0 -a android.intent.action.VIEW -d "$url" -n "$activity_name" >/dev/null 2>&1 &
     fi
     ;;
