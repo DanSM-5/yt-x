@@ -826,6 +826,18 @@ For example:
 </details>
 
 <details>
+<summary><b>Preview channel, view count, live status, channel follower not show is it normal?</b></summary>
+<br>
+
+Well yes lol. 
+
+Though I found out this can be remedied by providing a po token.
+
+Read here to learn how to configure it: https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide
+
+</details>
+
+<details>
 <summary><b>How do I access age-restricted or members-only videos?</b></summary>
 <br>
 
