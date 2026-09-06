@@ -36,6 +36,7 @@ $CLI_REPO_URL = 'https://github.com/DanSM-5/yt-x'
 $CLI_VERSION_URL = 'https://raw.githubusercontent.com/DanSM-5/yt-x/refs/heads/master/version.txt'
 $CLI_RELEASES_BASE = 'https://github.com/DanSM-5/yt-x/releases/download'
 $CLI_RELEASE_ASSET = 'yt-x.ps1'
+$CLI_DISCORD_URL = 'https://discord.gg/6Y3STzYpSx'
 $CLI_RELEASE_TAG = "$CLI_RELEASES_BASE/v$CLI_VERSION"
 $CLI_RELEASE_URL = "$CLI_RELEASE_TAG/$CLI_RELEASE_ASSET"
 
@@ -91,12 +92,26 @@ $XDG_DATA_HOME = ($env:XDG_DATA_HOME ?? "$_home/.local/share") -replace '\\', '/
 
 $CLI_CONFIG_DIR = "$XDG_CONFIG_HOME/$CLI_APP_NAME"
 
+# config.ps1 (PowerShell), separate from the bash yt-x's shell `config` in the
+# same dir — the port dot-sources this rather than parsing shell syntax.
+$CLI_CONFIG_FILE = "$CLI_CONFIG_DIR/config.ps1"
+
+$CLI_MY_DIR = "$CLI_CONFIG_DIR/my"
+$CLI_MY_RECENTS_FILE = "$CLI_MY_DIR/recents.json"
+$CLI_MY_VIDEOS_FILE = "$CLI_MY_DIR/videos.json"
+$CLI_MY_PLAYLISTS_FILE = "$CLI_MY_DIR/playlists.json"
+$CLI_MY_SUBSCRIPTIONS_FILE = "$CLI_MY_DIR/subscriptions.json"
+$CLI_MY_CMDS_FILE = "$CLI_MY_DIR/cmds.json"
+
 $CLI_EXTENSIONS_DIR = "$CLI_CONFIG_DIR/extensions"
 $CLI_EXTENSIONS_SITES_DIR = "$CLI_EXTENSIONS_DIR/sites"
 $CLI_EXTENSIONS_THEMES_DIR = "$CLI_EXTENSIONS_DIR/themes"
 $CLI_EXTENSIONS_LANGS_DIR = "$CLI_EXTENSIONS_DIR/langs"
 $CLI_EXTENSIONS_CMDS_DIR = "$CLI_EXTENSIONS_DIR/cmds"
 $CLI_EXTENSIONS_UI_DIR = "$CLI_EXTENSIONS_DIR/ui"
+
+$CLI_DEFAULT_THEME_FILE = "$CLI_EXTENSIONS_THEMES_DIR/default.theme"
+$CLI_DEFAULT_LANG_FILE = "$CLI_EXTENSIONS_LANGS_DIR/default.lang"
 
 $CLI_CACHE_DIR = "$XDG_CACHE_HOME/$CLI_APP_NAME"
 
@@ -108,26 +123,14 @@ $CLI_PREVIEW_IMGS_DIR = "$CLI_PREVIEW_DIR/images"
 $CLI_PREVIEW_SCRIPTS_DIR = "$CLI_PREVIEW_DIR/text"
 # port: shared preview script is PowerShell (.ps1), dot-sourced by the per-item
 # preview scripts which fzf runs via --with-shell pwsh (original was .sh)
-$CLI_FZF_PREVIEW_SCRIPT = "$CLI_PREVIEW_SCRIPTS_DIR/fzf-preview.ps1"
+$CLI_PREVIEW_FZF_SCRIPT = "$CLI_PREVIEW_SCRIPTS_DIR/fzf-preview.ps1"
 
 $CLI_AUTO_GEN_PLAYLISTS = "$CLI_CACHE_DIR/generated-playlists"
 $CLI_DOWNLOAD_ARCHIVE_DIR = "$CLI_CACHE_DIR/archives"
-$CLI_LOG_DIR = "$CLI_CACHE_DIR/logs"
-
-# config.ps1 (PowerShell), separate from the bash yt-x's shell `config` in the
-# same dir — the port dot-sources this rather than parsing shell syntax.
-$CLI_CONFIG_FILE = "$CLI_CONFIG_DIR/config.ps1"
-$CLI_DEFAULT_THEME_FILE = "$CLI_EXTENSIONS_THEMES_DIR/default.theme"
-$CLI_DEFAULT_LANG_FILE = "$CLI_EXTENSIONS_LANGS_DIR/default.lang"
-$CLI_RECENT_FILE = "$CLI_CONFIG_DIR/recent.json"
-$CLI_SAVED_VIDEOS_FILE = "$CLI_CONFIG_DIR/saved-videos.json"
-$CLI_CUSTOM_PLAYLISTS_FILE = "$CLI_CONFIG_DIR/custom-playlists.json"
-$CLI_SUBSCRIPTIONS_FILE = "$CLI_CONFIG_DIR/subscriptions.json"
-$CLI_CUSTOM_CMDS_FILE = "$CLI_CONFIG_DIR/custom-cmds.json"
 $CLI_SEARCH_HISTORY_FILE = "$CLI_CACHE_DIR/search-history.txt"
-$CLI_LOG_FILE = "$CLI_LOG_DIR/$CLI_NAME.log"
 
 $null = New-Item -ItemType Directory -Force -Path `
+  $CLI_MY_DIR, `
   $CLI_EXTENSIONS_SITES_DIR, `
   $CLI_EXTENSIONS_THEMES_DIR, `
   $CLI_EXTENSIONS_LANGS_DIR, `
@@ -137,8 +140,7 @@ $null = New-Item -ItemType Directory -Force -Path `
   $CLI_PREVIEW_IMGS_DIR, `
   $CLI_PREVIEW_SCRIPTS_DIR, `
   $CLI_AUTO_GEN_PLAYLISTS, `
-  $CLI_DOWNLOAD_ARCHIVE_DIR, `
-  $CLI_LOG_DIR
+  $CLI_DOWNLOAD_ARCHIVE_DIR
 
 # ==============================================================================
 # Declarations for lsp
@@ -226,7 +228,8 @@ function __load_default_config {
   --exact
   --tabstop=1
   --preview-window=border-rounded,left,35%,wrap-word
-  --wrap
+  --wrap-sign=''
+  --wrap-word
 '@
 }
 
@@ -317,12 +320,12 @@ function __load_default_lang {
 
   $script:TXT_CONFIG_BROWSER_NOT_SET = "Please set CONFIG_BROWSER to proceed"
 
-  $script:TXT_CUSTOM_CMDS_FILE_NOT_FOUND = "You dont have any custom cmds. Create them here $CLI_CUSTOM_CMDS_FILE or use the ui"
+  $script:TXT_MY_CMDS_FILE_NOT_FOUND = "You dont have any custom cmds. Create them here $CLI_MY_CMDS_FILE or use the ui"
+  $script:TXT_MY_VIDEOS_FILE_NOT_FOUND = "You dont have any saved videos. Start saving videos to generate this file or edit the file here $CLI_MY_VIDEOS_FILE"
+  $script:TXT_MY_PLAYLISTS_FILE_NOT_FOUND = "You dont have any custom playlists. Start saving playlists to generate this file or edit the file here $CLI_MY_PLAYLISTS_FILE"
+  $script:TXT_MY_SUBS_FILE_NOT_FOUND = "You don't have any channel subscriptions. Please use the miscellaneous menu to add subscriptions to $CLI_MY_SUBSCRIPTIONS_FILE"
+  $script:TXT_MY_RECENTS_FILE_NOT_FOUND = "You don't have any recent videos. Try watching sth first : ). And an entry will be created at $CLI_MY_RECENTS_FILE"
   $script:TXT_SEARCH_HISTORY_FILE_NOT_FOUND = "You dont have any search history. Start searching to generate search history or edit the file here $CLI_SEARCH_HISTORY_FILE"
-  $script:TXT_SAVED_VIDEOS_FILE_NOT_FOUND = "You dont have any saved videos. Start saving videos to generate this file or edit the file here $CLI_SAVED_VIDEOS_FILE"
-  $script:TXT_CUSTOM_PLAYLISTS_FILE_NOT_FOUND = "You dont have any custom playlists. Start saving playlists to generate this file or edit the file here $CLI_CUSTOM_PLAYLISTS_FILE"
-  $script:TXT_SUBS_FILE_NOT_FOUND = "You don't have any channel subscriptions. Please use the miscellaneous menu to add subscriptions to $CLI_SUBSCRIPTIONS_FILE"
-  $script:TXT_RECENT_FILE_NOT_FOUND = "You don't have any recent videos. Try watching sth first : ). And an entry will be created at $CLI_RECENT_FILE"
 
   $script:TXT_MENU_MAIN_PROMPT_ACTION = "Select an action"
   $script:TXT_MENU_MAIN = "Main Menu"
@@ -346,21 +349,19 @@ Recall history         –  !1, !2, … (newest = 1)
   $script:TXT_MENU_MAIN_CHANNELS = "Channels"
   $script:TXT_MENU_MAIN_CHANNELS_PROMPT = "Select Channel"
 
-  $script:TXT_MENU_MAIN_CUSTOM_PLAYLISTS = "Custom Playlists"
-  $script:TXT_MENU_MAIN_CUSTOM_PLAYLISTS_PROMPT = "Select Playlist"
+  $script:TXT_MENU_MAIN_MY_PLAYLISTS = "My Playlists"
+  $script:TXT_MENU_MAIN_MY_PLAYLISTS_PROMPT = "Select Playlist"
 
   $script:TXT_MENU_MAIN_LIKED = "Liked Videos"
 
-  $script:TXT_MENU_MAIN_SAVED = "Saved Videos"
-  $script:TXT_MENU_MAIN_SAVED_PROMPT = "Select video"
+  $script:TXT_MENU_MAIN_MY_VIDEOS = "My Videos"
+  $script:TXT_MENU_MAIN_MY_VIDEOS_PROMPT = "Select video"
 
   $script:TXT_MENU_MAIN_HISTORY = "Watch History"
-  $script:TXT_MENU_MAIN_RECENT = "Recent"
+  $script:TXT_MENU_MAIN_MY_RECENTS = "Recent"
   $script:TXT_MENU_MAIN_CLIPS = "Clips"
   $script:TXT_MENU_MAIN_EDIT_CONFIG = "Edit Config"
   $script:TXT_MENU_MAIN_MISC = "Miscellaneous"
-
-  $script:TXT_MENU_PROMPT_SEARCH = "Enter search query"
 
   $script:TXT_MENU_MISC_PROMPT = "Select an action"
 
@@ -431,7 +432,8 @@ NOTE: There are base options which are given to yt-dlp but can be overriden
   $script:TXT_MENU_CHANNEL_ACTIONS_STREAMS = "Streams"
   $script:TXT_MENU_CHANNEL_ACTIONS_PODCASTS = "Podcasts"
   $script:TXT_MENU_CHANNEL_ACTIONS_SUBSCRIBE = "Subscribe"
-  $script:TXT_MENU_CHANNEL_ACTIONS_SUBSCRIBE_CONFIRM = "Would you like to import your youtube subscriptions first? You wont be able to do so again unless you delete $CLI_SUBSCRIPTIONS_FILE"
+  $script:TXT_MENU_CHANNEL_ACTIONS_OPEN_IN_BROWSER = "Open in Browser"
+  $script:TXT_MENU_CHANNEL_ACTIONS_SUBSCRIBE_CONFIRM = "Would you like to import your youtube subscriptions first? You wont be able to do so again unless you delete $CLI_MY_SUBSCRIPTIONS_FILE"
 
   $script:TXT_MENU_PLAYLISTS_EXPLORER_PROMPT = "Select Playlist"
 
@@ -454,6 +456,7 @@ NOTE: There are base options which are given to yt-dlp but can be overriden
   $script:TXT_MENU_MEDIA_ACTIONS_DOWNLOAD_AUDIO = "Download (Audio Only)"
   $script:TXT_MENU_MEDIA_ACTIONS_DOWNLOAD_ALL_AUDIO = "Download All (Audio Only)"
   $script:TXT_MENU_MEDIA_ACTIONS_BROWSER = "Open in Browser"
+  $script:TXT_MENU_MEDIA_ACTIONS_BROWSER_PLAYLIST = "Open in Browser (Playlist)"
   $script:TXT_MENU_MEDIA_ACTIONS_TOGGLE_ENUM = "Toggle Enumerate Downloads"
   $script:TXT_MENU_MEDIA_ACTIONS_SHELL = "Shell"
   $script:TXT_MENU_MEDIA_ACTIONS_CHANNEL_NOT_FOUND = "Could not determine a channel URL for this video"
@@ -473,7 +476,7 @@ NOTE: There are base options which are given to yt-dlp but can be overriden
   $script:TXT_UPDATE_FAILED = "Can't update for some reason!"
   $script:TXT_UPDATE_FETCH_FAILED = "Something went wrong fetching the update, can't proceed with the update"
   $script:TXT_UPDATE_FOUND = "An update has been found would you like to see the changes before deciding whether to update?"
-  $script:TXT_DEP_MISSING_DIFF = "Could not find git in path please install it to view update diffs"
+  $script:TXT_DEP_MISSING_DIFF = "Could not find kitten diff or git in path; please install one to view update diffs"
   $script:TXT_UPDATE_CONFIRM = "Would you like to proceed with the update?"
   $script:TXT_UPDATE_NOT_FOUND = "No updates found"
 
@@ -643,8 +646,8 @@ Examples:
   $CLI_NAME --cmd-exit channels -n 'freeCodeCamp.org' # useful for setting aliases eg a shortcut to always go to freecodecamp channel 'freecodecamp'
   $CLI_NAME --launcher rofi --cmd-exit channels -n 'freeCodeCamp.org' # or as an app eg  'freecodecamp-app'
 
-For more details visit the FAQ:
-  https://github.com/Benexl/yt-x#frequently-asked-questions-faq
+In case of any questions join the Discord server $CLI_DISCORD_URL
+or read the readme and especially the FAQ section at $CLI_REPO_URL
 "@
 
   $script:TXT_APP_USAGE_CHANNELS = @"
@@ -714,6 +717,7 @@ Example:
   $script:TXT_ICON_MENU_MEDIA_ACTIONS_DOWNLOAD_AUDIO = "󱑤"
   $script:TXT_ICON_MENU_MEDIA_ACTIONS_DOWNLOAD_ALL_AUDIO = "󰦗"
   $script:TXT_ICON_MENU_MEDIA_ACTIONS_BROWSER = ""
+  $script:TXT_ICON_MENU_MEDIA_ACTIONS_BROWSER_PLAYLIST = ""
   $script:TXT_ICON_MENU_MEDIA_ACTIONS_TOGGLE_ENUM = ""
   $script:TXT_ICON_MENU_MEDIA_ACTIONS_SHELL = ""
   $script:TXT_ICON_MENU_MEDIA_ACTIONS_BACK = "󰌍"
@@ -727,6 +731,7 @@ Example:
   $script:TXT_ICON_MENU_CHANNEL_ACTIONS_STREAMS = "󰠿"
   $script:TXT_ICON_MENU_CHANNEL_ACTIONS_PODCASTS = ""
   $script:TXT_ICON_MENU_CHANNEL_ACTIONS_SUBSCRIBE = "󰵀"
+  $script:TXT_ICON_MENU_CHANNEL_ACTIONS_BROWSER = ""
   $script:TXT_ICON_MENU_CHANNEL_ACTIONS_BACK = "󰌍"
   $script:TXT_ICON_MENU_CHANNEL_ACTIONS_EXIT = "󰈆"
 
@@ -979,9 +984,13 @@ $(__cfg 'CONFIG_ROFI_THEME_PROMPT')
 $(__cfg 'CONFIG_ROFI_THEME_CONFIRM')
 $(__cfg 'CONFIG_ROFI_THEME_PAGER')
 
-# Number of days to keep cached preview images, playlists, and logs
+# Number of days to keep cached preview images and playlists
 # Default: 3
 $(__cfg 'CONFIG_CACHE_RETENTION_DAYS')
+
+# ==============================================================================
+# Join the community at $CLI_DISCORD_URL
+# and don't forget to star the repo $CLI_REPO_URL :)
 # ==============================================================================
 # 楽しんでね
 # ==============================================================================
@@ -1019,7 +1028,13 @@ function _util_terminal_exec {
   if (-not $CLI_IS_TERMINAL) {
     if ($CONFIG_TERMINAL_EXEC) { $term = $CONFIG_TERMINAL_EXEC }
     elseif (_dep_ch kitty) { $term = 'kitty --exec' }
+    elseif (_dep_ch ghostty) { $term = 'ghostty -e' }
     elseif (_dep_ch alacritty) { $term = 'alacritty --command' }
+    elseif (_dep_ch gnome-terminal) { $term = 'gnome-terminal --' }
+    elseif (_dep_ch ptyxis) { $term = 'ptyxis --' }
+    elseif (_dep_ch konsole) { $term = 'konsole -e' }
+    elseif (_dep_ch foot) { $term = 'foot' }
+    elseif (_dep_ch wezterm) { $term = 'wezterm start' }
     else { ui_notify_error $TXT_NO_TERMINAL_EXEC; return }
     $termParts = $term -split ' '
     & $termParts[0] @($termParts | Select-Object -Skip 1) @cmd
@@ -1430,9 +1445,9 @@ function ui_load { _ui_loader @args }
 # output (image bytes + text) goes through ONE raw stdout stream so ordering and
 # UTF-8 are preserved.
 function __preview_fzf_create_shared_script {
-  if ((Test-Path -LiteralPath $CLI_FZF_PREVIEW_SCRIPT) -and (Get-Item -LiteralPath $CLI_FZF_PREVIEW_SCRIPT).Length -gt 0) { return }
+  if ((Test-Path -LiteralPath $CLI_PREVIEW_FZF_SCRIPT) -and (Get-Item -LiteralPath $CLI_PREVIEW_FZF_SCRIPT).Length -gt 0) { return }
 
-  Set-Content -Encoding utf8 -LiteralPath $CLI_FZF_PREVIEW_SCRIPT -Value @'
+  Set-Content -Encoding utf8 -LiteralPath $CLI_PREVIEW_FZF_SCRIPT -Value @'
 # ==============================================================================
 # Shared script for fzf previews (PowerShell; dot-sourced by per-item scripts)
 # ==============================================================================
@@ -1618,9 +1633,9 @@ function __preview_fzf_generate_script_for_item {
   $L.Add('# This script is generated dynamically for each preview item and is executed by')
   $L.Add('# fzf (via --with-shell pwsh) when that item is previewed. Customize the content')
   $L.Add('# and layout by editing __preview_fzf_generate_script_for_item. It has access to')
-  $L.Add("# the helpers in the shared script ($CLI_FZF_PREVIEW_SCRIPT).")
+  $L.Add("# the helpers in the shared script ($CLI_PREVIEW_FZF_SCRIPT).")
   $L.Add('# =============================================================================')
-  $L.Add("if (Test-Path -LiteralPath $(__psq $CLI_FZF_PREVIEW_SCRIPT)) { . $(__psq $CLI_FZF_PREVIEW_SCRIPT) } else { exit 1 }")
+  $L.Add("if (Test-Path -LiteralPath $(__psq $CLI_PREVIEW_FZF_SCRIPT)) { . $(__psq $CLI_PREVIEW_FZF_SCRIPT) } else { exit 1 }")
   $L.Add('')
 
   if ($CONFIG_ENABLE_PREVIEW_IMAGES -eq 'true') {
@@ -2078,7 +2093,7 @@ function _fetch_yt_subs {
 
     $channels_data = & yt-dlp 'https://www.youtube.com/feed/channels' --flat-playlist --dump-single-json --cookies-from-browser $CONFIG_BROWSER
     if ($channels_data) {
-      [IO.File]::WriteAllText($CLI_SUBSCRIPTIONS_FILE, ($channels_data -join "`n"), [Text.UTF8Encoding]::new($false))
+      [IO.File]::WriteAllText($CLI_MY_SUBSCRIPTIONS_FILE, ($channels_data -join "`n"), [Text.UTF8Encoding]::new($false))
     } else {
       ui_notify_error $TXT_MENU_MISC_SYNC_SUBS_FAILED
     }
@@ -2343,8 +2358,8 @@ function play {
 # ==============================================================================
 function _update_recent {
   $current_recent = '{"entries":[]}'
-  if ((Test-Path -LiteralPath $CLI_RECENT_FILE) -and (Get-Item -LiteralPath $CLI_RECENT_FILE).Length -gt 0) {
-    $current_recent = Get-Content -Raw -LiteralPath $CLI_RECENT_FILE
+  if ((Test-Path -LiteralPath $CLI_MY_RECENTS_FILE) -and (Get-Item -LiteralPath $CLI_MY_RECENTS_FILE).Length -gt 0) {
+    $current_recent = Get-Content -Raw -LiteralPath $CLI_MY_RECENTS_FILE
   }
 
   $video = $STATE_CURRENT_VIDEO | ConvertFrom-Json
@@ -2357,13 +2372,13 @@ function _update_recent {
   $entries = @($entries | Select-Object -Last ([int]$CONFIG_NO_OF_RECENT))
 
   $out = [pscustomobject]@{ entries = @($entries) }
-  [IO.File]::WriteAllText($CLI_RECENT_FILE, ($out | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($CLI_MY_RECENTS_FILE, ($out | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
 }
 
 function _update_saved_videos {
   $current_saved_videos = '{"entries":[]}'
-  if ((Test-Path -LiteralPath $CLI_SAVED_VIDEOS_FILE) -and (Get-Item -LiteralPath $CLI_SAVED_VIDEOS_FILE).Length -gt 0) {
-    $current_saved_videos = Get-Content -Raw -LiteralPath $CLI_SAVED_VIDEOS_FILE
+  if ((Test-Path -LiteralPath $CLI_MY_VIDEOS_FILE) -and (Get-Item -LiteralPath $CLI_MY_VIDEOS_FILE).Length -gt 0) {
+    $current_saved_videos = Get-Content -Raw -LiteralPath $CLI_MY_VIDEOS_FILE
   }
 
   $video = $STATE_CURRENT_VIDEO | ConvertFrom-Json
@@ -2375,13 +2390,13 @@ function _update_saved_videos {
   $entries += $video
 
   $out = [pscustomobject]@{ entries = @($entries) }
-  [IO.File]::WriteAllText($CLI_SAVED_VIDEOS_FILE, ($out | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($CLI_MY_VIDEOS_FILE, ($out | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
 }
 
 function _update_saved_playlists {
   $custom_playlists = '[]'
-  if ((Test-Path -LiteralPath $CLI_CUSTOM_PLAYLISTS_FILE) -and (Get-Item -LiteralPath $CLI_CUSTOM_PLAYLISTS_FILE).Length -gt 0) {
-    $custom_playlists = Get-Content -Raw -LiteralPath $CLI_CUSTOM_PLAYLISTS_FILE
+  if ((Test-Path -LiteralPath $CLI_MY_PLAYLISTS_FILE) -and (Get-Item -LiteralPath $CLI_MY_PLAYLISTS_FILE).Length -gt 0) {
+    $custom_playlists = Get-Content -Raw -LiteralPath $CLI_MY_PLAYLISTS_FILE
   }
 
   $playlist_name = $STATE_CURRENT_PLAYLIST_TITLE | ui_prompt $TXT_MENU_MEDIA_ACTIONS_PROMPT_SAVE_PLAYLIST $STATE_CURRENT_PLAYLIST_TITLE
@@ -2391,39 +2406,39 @@ function _update_saved_playlists {
   $arr = @($custom_playlists | ConvertFrom-Json)
   $arr += [pscustomobject]@{ id = $playlist_id; name = $playlist_name; url = $STATE_CURRENT_PLAYLIST_URL }
 
-  [IO.File]::WriteAllText($CLI_CUSTOM_PLAYLISTS_FILE, (ConvertTo-Json -InputObject @($arr) -Depth 100), [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($CLI_MY_PLAYLISTS_FILE, (ConvertTo-Json -InputObject @($arr) -Depth 100), [Text.UTF8Encoding]::new($false))
 }
 
 function _remove_recent {
   $current_recent = '{"entries":[]}'
-  if ((Test-Path -LiteralPath $CLI_RECENT_FILE) -and (Get-Item -LiteralPath $CLI_RECENT_FILE).Length -gt 0) {
-    $current_recent = Get-Content -Raw -LiteralPath $CLI_RECENT_FILE
+  if ((Test-Path -LiteralPath $CLI_MY_RECENTS_FILE) -and (Get-Item -LiteralPath $CLI_MY_RECENTS_FILE).Length -gt 0) {
+    $current_recent = Get-Content -Raw -LiteralPath $CLI_MY_RECENTS_FILE
   }
 
   $id = ($STATE_CURRENT_VIDEO | ConvertFrom-Json).id
 
   $data = $current_recent | ConvertFrom-Json
   $out = [pscustomobject]@{ entries = @($data.entries | Where-Object { $_.id -ne $id }) }
-  [IO.File]::WriteAllText($CLI_RECENT_FILE, ($out | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($CLI_MY_RECENTS_FILE, ($out | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
 }
 
 function _remove_saved_video {
   $current_saved_videos = '{"entries":[]}'
-  if ((Test-Path -LiteralPath $CLI_SAVED_VIDEOS_FILE) -and (Get-Item -LiteralPath $CLI_SAVED_VIDEOS_FILE).Length -gt 0) {
-    $current_saved_videos = Get-Content -Raw -LiteralPath $CLI_SAVED_VIDEOS_FILE
+  if ((Test-Path -LiteralPath $CLI_MY_VIDEOS_FILE) -and (Get-Item -LiteralPath $CLI_MY_VIDEOS_FILE).Length -gt 0) {
+    $current_saved_videos = Get-Content -Raw -LiteralPath $CLI_MY_VIDEOS_FILE
   }
 
   $id = ($STATE_CURRENT_VIDEO | ConvertFrom-Json).id
 
   $data = $current_saved_videos | ConvertFrom-Json
   $out = [pscustomobject]@{ entries = @($data.entries | Where-Object { $_.id -ne $id }) }
-  [IO.File]::WriteAllText($CLI_SAVED_VIDEOS_FILE, ($out | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($CLI_MY_VIDEOS_FILE, ($out | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
 }
 
 function _remove_saved_playlist {
   $custom_playlists = '[]'
-  if ((Test-Path -LiteralPath $CLI_CUSTOM_PLAYLISTS_FILE) -and (Get-Item -LiteralPath $CLI_CUSTOM_PLAYLISTS_FILE).Length -gt 0) {
-    $custom_playlists = Get-Content -Raw -LiteralPath $CLI_CUSTOM_PLAYLISTS_FILE
+  if ((Test-Path -LiteralPath $CLI_MY_PLAYLISTS_FILE) -and (Get-Item -LiteralPath $CLI_MY_PLAYLISTS_FILE).Length -gt 0) {
+    $custom_playlists = Get-Content -Raw -LiteralPath $CLI_MY_PLAYLISTS_FILE
   }
 
   $playlist_id = $STATE_CURRENT_PLAYLIST_URL -replace '.*list=', ''
@@ -2433,7 +2448,7 @@ function _remove_saved_playlist {
   # empties the whole file (removing one playlist wipes all saved playlists).
   # This ports the apparent INTENT: filter out the element whose id matches.
   $arr = @($custom_playlists | ConvertFrom-Json | Where-Object { $_.id -ne $playlist_id })
-  [IO.File]::WriteAllText($CLI_CUSTOM_PLAYLISTS_FILE, (ConvertTo-Json -InputObject @($arr) -Depth 100), [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($CLI_MY_PLAYLISTS_FILE, (ConvertTo-Json -InputObject @($arr) -Depth 100), [Text.UTF8Encoding]::new($false))
 }
 
 function _get_search_history_entry {
@@ -2577,6 +2592,12 @@ function __menu_media_actions_open_in_browser {
   if (-not (_util_open $STATE_CURRENT_VIDEO_URL)) { ui_notify_error $TXT_MENU_MEDIA_ACTIONS_OPEN_IN_BROWSER_ERROR }
 }
 
+function __menu_media_actions_open_in_browser_playlist {
+  if (-not $STATE_CURRENT_PLAYLIST_URL -or -not (_util_open $STATE_CURRENT_PLAYLIST_URL)) {
+    ui_notify_error $TXT_MENU_MEDIA_ACTIONS_OPEN_IN_BROWSER_ERROR
+  }
+}
+
 function __menu_media_actions_visit_channel {
   $video = $STATE_CURRENT_VIDEO | ConvertFrom-Json
 
@@ -2663,6 +2684,7 @@ function _menu_media_actions {
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MEDIA_ACTIONS_DOWNLOAD_AUDIO}${THEME_RESET}  ${TXT_MENU_MEDIA_ACTIONS_DOWNLOAD_AUDIO}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MEDIA_ACTIONS_DOWNLOAD_ALL_AUDIO}${THEME_RESET}  ${TXT_MENU_MEDIA_ACTIONS_DOWNLOAD_ALL_AUDIO}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MEDIA_ACTIONS_BROWSER}${THEME_RESET}  ${TXT_MENU_MEDIA_ACTIONS_BROWSER}
+ ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MEDIA_ACTIONS_BROWSER_PLAYLIST}${THEME_RESET}  ${TXT_MENU_MEDIA_ACTIONS_BROWSER_PLAYLIST}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MEDIA_ACTIONS_TOGGLE_ENUM}${THEME_RESET}  ${TXT_MENU_MEDIA_ACTIONS_TOGGLE_ENUM}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MEDIA_ACTIONS_SHELL}${THEME_RESET}  ${TXT_MENU_MEDIA_ACTIONS_SHELL}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MEDIA_ACTIONS_BACK}${THEME_RESET}  ${TXT_MENU_BACK}
@@ -2706,6 +2728,7 @@ function _menu_media_actions {
       $TXT_MENU_MEDIA_ACTIONS_VISIT_CHANNEL { __menu_media_actions_visit_channel }
       $TXT_MENU_MEDIA_ACTIONS_SUBSCRIBE { __menu_media_actions_subscribe_to_channel }
       $TXT_MENU_MEDIA_ACTIONS_BROWSER { __menu_media_actions_open_in_browser }
+      $TXT_MENU_MEDIA_ACTIONS_BROWSER_PLAYLIST { __menu_media_actions_open_in_browser_playlist }
       $TXT_MENU_MEDIA_ACTIONS_TOGGLE_ENUM { __menu_media_actions_toggle_enumerate_downloads }
       $TXT_MENU_MEDIA_ACTIONS_SHELL { __menu_media_actions_shell }
       $TXT_MENU_EXIT { _util_byebye }
@@ -2847,15 +2870,15 @@ function menu_playlists_explorer {
 # Menus: channels actions
 # ==============================================================================
 function __menu_channel_actions_subscribe {
-  if (-not ((Test-Path -LiteralPath $CLI_SUBSCRIPTIONS_FILE) -and (Get-Item -LiteralPath $CLI_SUBSCRIPTIONS_FILE).Length -gt 0)) {
+  if (-not ((Test-Path -LiteralPath $CLI_MY_SUBSCRIPTIONS_FILE) -and (Get-Item -LiteralPath $CLI_MY_SUBSCRIPTIONS_FILE).Length -gt 0)) {
     if (ui_confirm $TXT_MENU_CHANNEL_ACTIONS_SUBSCRIBE_CONFIRM) {
       fetch_yt_subs
-      $_channels_data = Get-Content -Raw -LiteralPath $CLI_SUBSCRIPTIONS_FILE
+      $_channels_data = Get-Content -Raw -LiteralPath $CLI_MY_SUBSCRIPTIONS_FILE
     } else {
       $_channels_data = '{"entries":[]}'
     }
   } else {
-    $_channels_data = Get-Content -Raw -LiteralPath $CLI_SUBSCRIPTIONS_FILE
+    $_channels_data = Get-Content -Raw -LiteralPath $CLI_MY_SUBSCRIPTIONS_FILE
   }
 
   $channel = @(($STATE_CURRENT_CHANNEL_RESULTS | ConvertFrom-Json).entries | Where-Object { $_.title -eq $STATE_CURRENT_CHANNEL_TITLE })[0]
@@ -2867,7 +2890,13 @@ function __menu_channel_actions_subscribe {
   $entries += $channel
 
   $out = [pscustomobject]@{ entries = @($entries) }
-  [IO.File]::WriteAllText($CLI_SUBSCRIPTIONS_FILE, ($out | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($CLI_MY_SUBSCRIPTIONS_FILE, ($out | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
+}
+
+function __menu_channel_actions_open_in_browser {
+  if (-not $STATE_CURRENT_CHANNEL_URL -or -not (_util_open $STATE_CURRENT_CHANNEL_URL)) {
+    ui_notify_error $TXT_MENU_MEDIA_ACTIONS_OPEN_IN_BROWSER_ERROR
+  }
 }
 
 function _menu_channel_actions {
@@ -2882,6 +2911,7 @@ function _menu_channel_actions {
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_CHANNEL_ACTIONS_STREAMS}${THEME_RESET}  ${TXT_MENU_CHANNEL_ACTIONS_STREAMS}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_CHANNEL_ACTIONS_PODCASTS}${THEME_RESET}  ${TXT_MENU_CHANNEL_ACTIONS_PODCASTS}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_CHANNEL_ACTIONS_SUBSCRIBE}${THEME_RESET}  ${TXT_MENU_CHANNEL_ACTIONS_SUBSCRIBE}
+ ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_CHANNEL_ACTIONS_BROWSER}${THEME_RESET}  ${TXT_MENU_CHANNEL_ACTIONS_OPEN_IN_BROWSER}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_CHANNEL_ACTIONS_BACK}${THEME_RESET}  ${TXT_MENU_BACK}
  ${THEME_FZF_ICON_COLOR_ERROR}${TXT_ICON_MENU_CHANNEL_ACTIONS_EXIT}${THEME_RESET}  ${TXT_MENU_EXIT}
 "@
@@ -2956,6 +2986,7 @@ function _menu_channel_actions {
         menu_playlist_explorer
       }
       $TXT_MENU_CHANNEL_ACTIONS_SUBSCRIBE { __menu_channel_actions_subscribe }
+      $TXT_MENU_CHANNEL_ACTIONS_OPEN_IN_BROWSER { __menu_channel_actions_open_in_browser }
       $TXT_MENU_EXIT { _util_byebye }
       { $_ -eq $TXT_MENU_BACK -or $_ -eq '' } {
         if ("$CMD_EXIT" -eq 'true') { _util_byebye }
@@ -3106,14 +3137,14 @@ function __menu_miscellaneous_new_custom_command {
 
   if ($custom_cmd_name -and $custom_cmd_url) {
     $custom_cmds = '[]'
-    if ((Test-Path -LiteralPath $CLI_CUSTOM_CMDS_FILE) -and (Get-Item -LiteralPath $CLI_CUSTOM_CMDS_FILE).Length -gt 0) {
-      $custom_cmds = Get-Content -Raw -LiteralPath $CLI_CUSTOM_CMDS_FILE
+    if ((Test-Path -LiteralPath $CLI_MY_CMDS_FILE) -and (Get-Item -LiteralPath $CLI_MY_CMDS_FILE).Length -gt 0) {
+      $custom_cmds = Get-Content -Raw -LiteralPath $CLI_MY_CMDS_FILE
     }
 
     # TODO: maybe switch to a map
     $arr = @($custom_cmds | ConvertFrom-Json)
     $arr += [pscustomobject]@{ name = $custom_cmd_name; url = $custom_cmd_url; 'yt-dlp-opts' = $custom_cmd_yt_dlp_opts }
-    [IO.File]::WriteAllText($CLI_CUSTOM_CMDS_FILE, (ConvertTo-Json -InputObject @($arr) -Depth 100), [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($CLI_MY_CMDS_FILE, (ConvertTo-Json -InputObject @($arr) -Depth 100), [Text.UTF8Encoding]::new($false))
 
     $opts = @("$custom_cmd_yt_dlp_opts" -split '\s+' | Where-Object { $_ })
     _fetch_playlist $custom_cmd_url @opts
@@ -3126,13 +3157,13 @@ function __menu_miscellaneous_new_custom_command {
 }
 
 function __menu_miscellaneous_custom_commands {
-  if ((Test-Path -LiteralPath $CLI_CUSTOM_CMDS_FILE) -and (Get-Item -LiteralPath $CLI_CUSTOM_CMDS_FILE).Length -gt 0) {
+  if ((Test-Path -LiteralPath $CLI_MY_CMDS_FILE) -and (Get-Item -LiteralPath $CLI_MY_CMDS_FILE).Length -gt 0) {
     :custom_loop while ($true) {
       if ($CMD_INPUT) {
         $custom_cmd_name = $CMD_INPUT
         $script:CMD_INPUT = $null
       } else {
-        $names = (Get-Content -Raw -LiteralPath $CLI_CUSTOM_CMDS_FILE | ConvertFrom-Json).name
+        $names = (Get-Content -Raw -LiteralPath $CLI_MY_CMDS_FILE | ConvertFrom-Json).name
         $custom_cmd_name = "$(@($names) -join "`n")`n$TXT_MENU_BACK" | ui_launcher $TXT_MENU_MISC_CUSTOM_CMDS_PROMPT
       }
 
@@ -3141,7 +3172,7 @@ function __menu_miscellaneous_custom_commands {
           if ("$CMD_EXIT" -eq 'true') { _util_byebye } else { break custom_loop }
         }
         default {
-          $custom_cmd = @((Get-Content -Raw -LiteralPath $CLI_CUSTOM_CMDS_FILE | ConvertFrom-Json) | Where-Object { $_.name -eq $custom_cmd_name })[0]
+          $custom_cmd = @((Get-Content -Raw -LiteralPath $CLI_MY_CMDS_FILE | ConvertFrom-Json) | Where-Object { $_.name -eq $custom_cmd_name })[0]
           $url = $custom_cmd.url
           $yt_dlp_opts = $custom_cmd.'yt-dlp-opts'
 
@@ -3156,7 +3187,7 @@ function __menu_miscellaneous_custom_commands {
       }
     }
   } else {
-    ui_notify_warning $TXT_CUSTOM_CMDS_FILE_NOT_FOUND
+    ui_notify_warning $TXT_MY_CMDS_FILE_NOT_FOUND
   }
 }
 
@@ -3199,11 +3230,11 @@ function __menu_miscellaneous_edit_search_history {
 }
 
 function __menu_miscellaneous_edit_custom_playlists {
-  _util_file_edit $CLI_CUSTOM_PLAYLISTS_FILE
+  _util_file_edit $CLI_MY_PLAYLISTS_FILE
 }
 
 function __menu_miscellaneous_edit_custom_commands {
-  _util_file_edit $CLI_CUSTOM_CMDS_FILE
+  _util_file_edit $CLI_MY_CMDS_FILE
 }
 
 function __menu_miscellaneous_edit_mpv_config {
@@ -3466,8 +3497,8 @@ function __menu_main_trending {
 }
 
 function __menu_main_channels_explorer {
-  if ((Test-Path -LiteralPath $CLI_SUBSCRIPTIONS_FILE) -and (Get-Item -LiteralPath $CLI_SUBSCRIPTIONS_FILE).Length -gt 0) {
-    $channels = Get-Content -Raw -LiteralPath $CLI_SUBSCRIPTIONS_FILE
+  if ((Test-Path -LiteralPath $CLI_MY_SUBSCRIPTIONS_FILE) -and (Get-Item -LiteralPath $CLI_MY_SUBSCRIPTIONS_FILE).Length -gt 0) {
+    $channels = Get-Content -Raw -LiteralPath $CLI_MY_SUBSCRIPTIONS_FILE
     :main_channels_loop while ($true) {
       if ($CMD_CHANNEL) {
         $channel = $CMD_CHANNEL
@@ -3493,26 +3524,26 @@ function __menu_main_channels_explorer {
       }
     }
   } else {
-    ui_notify_warning $TXT_SUBS_FILE_NOT_FOUND
+    ui_notify_warning $TXT_MY_SUBS_FILE_NOT_FOUND
   }
 }
 
 function __menu_main_custom_playlists {
-  if ((Test-Path -LiteralPath $CLI_CUSTOM_PLAYLISTS_FILE) -and (Get-Item -LiteralPath $CLI_CUSTOM_PLAYLISTS_FILE).Length -gt 0) {
+  if ((Test-Path -LiteralPath $CLI_MY_PLAYLISTS_FILE) -and (Get-Item -LiteralPath $CLI_MY_PLAYLISTS_FILE).Length -gt 0) {
     :custom_pl_loop while ($true) {
       if ($CMD_INPUT) {
         $playlist_title = $CMD_INPUT
         $script:CMD_INPUT = $null
       } else {
-        $arr = @(Get-Content -Raw -LiteralPath $CLI_CUSTOM_PLAYLISTS_FILE | ConvertFrom-Json)
+        $arr = @(Get-Content -Raw -LiteralPath $CLI_MY_PLAYLISTS_FILE | ConvertFrom-Json)
         $names = @($arr); [array]::Reverse($names)
-        $playlist_title = "$(@($names.name) -join "`n")`n$TXT_MENU_BACK" | ui_launcher $TXT_MENU_MAIN_CUSTOM_PLAYLISTS_PROMPT
+        $playlist_title = "$(@($names.name) -join "`n")`n$TXT_MENU_BACK" | ui_launcher $TXT_MENU_MAIN_MY_PLAYLISTS_PROMPT
       }
 
       switch ($playlist_title) {
         { $_ -eq $TXT_MENU_BACK -or $_ -eq '' } { break custom_pl_loop }
         default {
-          $url = (@(Get-Content -Raw -LiteralPath $CLI_CUSTOM_PLAYLISTS_FILE | ConvertFrom-Json | Where-Object { $_.name -eq $playlist_title })[0]).url
+          $url = (@(Get-Content -Raw -LiteralPath $CLI_MY_PLAYLISTS_FILE | ConvertFrom-Json | Where-Object { $_.name -eq $playlist_title })[0]).url
 
           _fetch_playlist $url
           $script:STATE_CURRENT_PLAYLIST_START = 1
@@ -3528,16 +3559,16 @@ function __menu_main_custom_playlists {
       }
     }
   } else {
-    ui_notify_warning $TXT_CUSTOM_PLAYLISTS_FILE_NOT_FOUND
+    ui_notify_warning $TXT_MY_PLAYLISTS_FILE_NOT_FOUND
   }
 }
 
 function __menu_main_saved_videos {
-  if ((Test-Path -LiteralPath $CLI_SAVED_VIDEOS_FILE) -and (Get-Item -LiteralPath $CLI_SAVED_VIDEOS_FILE).Length -gt 0) {
+  if ((Test-Path -LiteralPath $CLI_MY_VIDEOS_FILE) -and (Get-Item -LiteralPath $CLI_MY_VIDEOS_FILE).Length -gt 0) {
     if ($CMD_INPUT) {
-      $saved_videos = Get-Content -Raw -LiteralPath $CLI_SAVED_VIDEOS_FILE
+      $saved_videos = Get-Content -Raw -LiteralPath $CLI_MY_VIDEOS_FILE
     } else {
-      $obj = Get-Content -Raw -LiteralPath $CLI_SAVED_VIDEOS_FILE | ConvertFrom-Json
+      $obj = Get-Content -Raw -LiteralPath $CLI_MY_VIDEOS_FILE | ConvertFrom-Json
       $rev = @($obj.entries); [array]::Reverse($rev); $obj.entries = $rev
       $saved_videos = __number_entry_titles $obj | ConvertTo-Json -Depth 100 -Compress
     }
@@ -3550,7 +3581,7 @@ function __menu_main_saved_videos {
         $titles = ($saved_videos | ConvertFrom-Json).entries.title
         $selection = "$(@($titles) -join "`n")`n$TXT_MENU_BACK" |
           preview $saved_videos |
-          ui_launcher_with_preview $TXT_MENU_MAIN_SAVED_PROMPT
+          ui_launcher_with_preview $TXT_MENU_MAIN_MY_VIDEOS_PROMPT
       }
 
       switch ($selection) {
@@ -3571,13 +3602,13 @@ function __menu_main_saved_videos {
       _util_byebye
     }
   } else {
-    ui_notify_warning $TXT_SAVED_VIDEOS_FILE_NOT_FOUND
+    ui_notify_warning $TXT_MY_VIDEOS_FILE_NOT_FOUND
   }
 }
 
 function __menu_main_recent {
-  if ((Test-Path -LiteralPath $CLI_RECENT_FILE) -and (Get-Item -LiteralPath $CLI_RECENT_FILE).Length -gt 0) {
-    $obj = Get-Content -Raw -LiteralPath $CLI_RECENT_FILE | ConvertFrom-Json
+  if ((Test-Path -LiteralPath $CLI_MY_RECENTS_FILE) -and (Get-Item -LiteralPath $CLI_MY_RECENTS_FILE).Length -gt 0) {
+    $obj = Get-Content -Raw -LiteralPath $CLI_MY_RECENTS_FILE | ConvertFrom-Json
     $rev = @($obj.entries); [array]::Reverse($rev); $obj.entries = $rev
     $saved_videos = __number_entry_titles $obj | ConvertTo-Json -Depth 100 -Compress
 
@@ -3585,7 +3616,7 @@ function __menu_main_recent {
       $titles = ($saved_videos | ConvertFrom-Json).entries.title
       $selection = "$(@($titles) -join "`n")`n$TXT_MENU_BACK" |
         preview $saved_videos |
-        ui_launcher_with_preview $TXT_MENU_MAIN_SAVED_PROMPT
+        ui_launcher_with_preview $TXT_MENU_MAIN_MY_VIDEOS_PROMPT
 
       switch ($selection) {
         { $_ -eq $TXT_MENU_BACK -or $_ -eq '' } { break recent_loop }
@@ -3602,13 +3633,19 @@ function __menu_main_recent {
       }
     }
   } else {
-    ui_notify_warning $TXT_RECENT_FILE_NOT_FOUND
+    ui_notify_warning $TXT_MY_RECENTS_FILE_NOT_FOUND
   }
 }
 
 function __menu_main_edit_config {
+  $current_launcher = $CONFIG_LAUNCHER
+
   _util_file_edit $CLI_CONFIG_FILE
   _load_config
+
+  # Keep this session on the launcher it started with. A newly configured
+  # launcher takes effect the next time yt-x starts.
+  $script:CONFIG_LAUNCHER = $current_launcher
 }
 
 function _menu_main {
@@ -3621,9 +3658,9 @@ function _menu_main {
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MAIN_WATCH_LATER}${THEME_RESET}  ${TXT_MENU_MAIN_WATCH_LATER}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MAIN_PLAYLISTS}${THEME_RESET}  ${TXT_MENU_MAIN_PLAYLISTS}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MAIN_CHANNELS}${THEME_RESET}  ${TXT_MENU_MAIN_CHANNELS}
- ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MAIN_CUSTOM_PLAYLISTS}${THEME_RESET}  ${TXT_MENU_MAIN_CUSTOM_PLAYLISTS}
- ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MAIN_SAVED}${THEME_RESET}  ${TXT_MENU_MAIN_SAVED}
- ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MAIN_RECENT}${THEME_RESET}  ${TXT_MENU_MAIN_RECENT}
+ ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MAIN_CUSTOM_PLAYLISTS}${THEME_RESET}  ${TXT_MENU_MAIN_MY_PLAYLISTS}
+ ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MAIN_SAVED}${THEME_RESET}  ${TXT_MENU_MAIN_MY_VIDEOS}
+ ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MAIN_RECENT}${THEME_RESET}  ${TXT_MENU_MAIN_MY_RECENTS}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MAIN_LIKED}${THEME_RESET}  ${TXT_MENU_MAIN_LIKED}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MAIN_HISTORY}${THEME_RESET}  ${TXT_MENU_MAIN_HISTORY}
  ${THEME_FZF_ICON_COLOR_PRIMARY}${TXT_ICON_MENU_MAIN_CLIPS}${THEME_RESET}  ${TXT_MENU_MAIN_CLIPS}
@@ -3659,9 +3696,9 @@ function _menu_main {
       $TXT_MENU_MAIN_WATCH_LATER { __menu_main_watch_later }
       $TXT_MENU_MAIN_PLAYLISTS { __menu_main_playlists }
       $TXT_MENU_MAIN_CHANNELS { __menu_main_channels_explorer }
-      $TXT_MENU_MAIN_CUSTOM_PLAYLISTS { __menu_main_custom_playlists }
-      $TXT_MENU_MAIN_SAVED { __menu_main_saved_videos }
-      $TXT_MENU_MAIN_RECENT { __menu_main_recent }
+      $TXT_MENU_MAIN_MY_PLAYLISTS { __menu_main_custom_playlists }
+      $TXT_MENU_MAIN_MY_VIDEOS { __menu_main_saved_videos }
+      $TXT_MENU_MAIN_MY_RECENTS { __menu_main_recent }
       $TXT_MENU_MAIN_LIKED { __menu_main_liked_videos }
       $TXT_MENU_MAIN_HISTORY { __menu_main_watch_history }
       $TXT_MENU_MAIN_CLIPS { __menu_main_clips }
@@ -3690,10 +3727,9 @@ function menu_main {
 function _app_update_script {
   param([string]$update)
 
-  # DIVERGENCE: self-update fetches the UPSTREAM BASH yt-x and overwrites
-  # CLI_PATH (here yt-x.ps1) — it would replace this port with the bash script.
-  # The port is meant to be updated by MANUALLY porting upstream changes; this is
-  # kept for structural parity only. Unix sudo/exec are adapted to pwsh.
+  # The PowerShell port fetches its own release asset from the fork configured in
+  # META. Write beside the live script, then replace it so a failed write cannot
+  # leave the installed client partially updated.
   $writable = $false
   try { $fs = [IO.File]::Open($CLI_PATH, 'Open', 'Write'); $fs.Close(); $writable = $true } catch { $writable = $false }
   if (-not $writable) {
@@ -3703,18 +3739,21 @@ function _app_update_script {
 
   if (-not $update) { ui_notify_critical $TXT_UPDATE_FETCH_FAILED }
 
+  $temp_path = "$CLI_PATH.tmp"
   try {
-    [IO.File]::WriteAllText($CLI_PATH, "$update`n", [Text.UTF8Encoding]::new($false))
-    Remove-Item -LiteralPath $CLI_FZF_PREVIEW_SCRIPT -ErrorAction SilentlyContinue
+    [IO.File]::WriteAllText($temp_path, "$update`n", [Text.UTF8Encoding]::new($false))
+    [IO.File]::Move($temp_path, $CLI_PATH, $true)
+    Remove-Item -LiteralPath $CLI_PREVIEW_FZF_SCRIPT -ErrorAction SilentlyContinue
     if (ui_confirm $TXT_UPDATE_SCRIPT_REEXECUTE) {
-      $reArgs = @("$CLI_ARGS" -split '\s+' | Where-Object { $_ })
-      & pwsh -NoProfile -File $CLI_PATH @reArgs
+      & pwsh -NoProfile -File $CLI_PATH @CLI_ARGS
       exit $LASTEXITCODE
     } else {
       exit 0
     }
   } catch {
     ui_notify_critical $TXT_UPDATE_FAILED
+  } finally {
+    Remove-Item -LiteralPath $temp_path -ErrorAction SilentlyContinue
   }
 }
 
@@ -3726,17 +3765,29 @@ function _app_update_check {
     $update = "$(& $curl_prg -sL "$CLI_RELEASES_BASE/v$latest_version/$CLI_RELEASE_ASSET")"
     if (-not $update) { return $false }
 
-    if (_dep_ch git) {
-      # `diff` is a PowerShell alias for Compare-Object (value-based set comparison,
-      # not a unified diff), so use git's unified diff instead. `--no-index` diffs
-      # two paths outside a repo and exits 1 when they differ (expected here).
-      $new_file = [IO.Path]::GetTempFileName()
+    $new_file = [IO.Path]::GetTempFileName()
+    try {
       [IO.File]::WriteAllText($new_file, "$update", (New-Object Text.UTF8Encoding $false))
-      $update_diff = & git --no-pager diff --no-index -- $CLI_PATH $new_file 2>$null
+
+      $has_kitten_diff = $false
+      if ($CLI_IS_TERMINAL -and (_dep_ch kitten)) {
+        & kitten diff --help *> $null
+        $has_kitten_diff = ($LASTEXITCODE -eq 0)
+      }
+
+      if ($has_kitten_diff) {
+        if (ui_confirm $TXT_UPDATE_FOUND) { & kitten diff $CLI_PATH $new_file }
+      } elseif (_dep_ch git) {
+        # `diff` is a PowerShell alias for Compare-Object (value-based set
+        # comparison), so use git's unified diff. `--no-index` exits 1 when the
+        # files differ, which is expected here.
+        $update_diff = & git --no-pager diff --no-index -- $CLI_PATH $new_file 2>$null
+        if (ui_confirm $TXT_UPDATE_FOUND) { $update_diff | ui_pager }
+      } else {
+        _ui_notify_warning $TXT_DEP_MISSING_DIFF
+      }
+    } finally {
       Remove-Item -LiteralPath $new_file -ErrorAction SilentlyContinue
-      if (ui_confirm $TXT_UPDATE_FOUND) { $update_diff | ui_pager }
-    } else {
-      _ui_notify_warning $TXT_DEP_MISSING_DIFF
     }
 
     if (ui_confirm $TXT_UPDATE_CONFIRM) { _app_update_script $update }
@@ -3812,7 +3863,7 @@ function _app_cache_clean_up {
   $retention_days = if ($CONFIG_CACHE_RETENTION_DAYS) { [int]$CONFIG_CACHE_RETENTION_DAYS } else { 3 }
   $cutoff = (Get-Date).AddDays(-$retention_days)
 
-  foreach ($dir in @($CLI_PREVIEW_DIR, $CLI_AUTO_GEN_PLAYLISTS, $CLI_LOG_DIR)) {
+  foreach ($dir in @($CLI_PREVIEW_DIR, $CLI_AUTO_GEN_PLAYLISTS)) {
     if ($dir -and (Test-Path -LiteralPath $dir -PathType Container)) {
       Get-ChildItem -LiteralPath $dir -File -Recurse -ErrorAction SilentlyContinue |
         Where-Object { $_.LastWriteTime -lt $cutoff } |
@@ -3908,9 +3959,9 @@ complete -c $CLI_NAME -n "__fish_use_subcommand" -o sc -l search-channel -d "Sea
 complete -c $CLI_NAME -n "__fish_use_subcommand" -o ss -l search-short -d "Search for shorts" --require-parameter
 complete -c $CLI_NAME -n "__fish_use_subcommand" -o sm -l search-movie -d "Search for movies" --require-parameter
 
-complete -c $CLI_NAME -n "__fish_use_subcommand" -o sv -l saved-video -d "Open a specific saved video" --require-parameter --no-files -a '(jq -r '.entries[].title' "'$CLI_SAVED_VIDEOS_FILE'" 2>/dev/null)'
-complete -c $CLI_NAME -n "__fish_use_subcommand" -o cp -l custom-playlist -d "Open a saved custom playlist" --require-parameter --no-files -a '(jq -r '.[]?.name' "'$CLI_CUSTOM_PLAYLISTS_FILE'" 2>/dev/null)'
-complete -c $CLI_NAME -n "__fish_use_subcommand" -o cc -l custom-cmd -d "Execute a specific custom command" --require-parameter --no-files -a '(jq -r '.[]?.name' "'$CLI_CUSTOM_CMDS_FILE'" 2>/dev/null)'
+complete -c $CLI_NAME -n "__fish_use_subcommand" -o sv -l saved-video -d "Open a specific saved video" --require-parameter --no-files -a '(jq -r '.entries[].title' "'$CLI_MY_VIDEOS_FILE'" 2>/dev/null)'
+complete -c $CLI_NAME -n "__fish_use_subcommand" -o cp -l custom-playlist -d "Open a saved custom playlist" --require-parameter --no-files -a '(jq -r '.[]?.name' "'$CLI_MY_PLAYLISTS_FILE'" 2>/dev/null)'
+complete -c $CLI_NAME -n "__fish_use_subcommand" -o cc -l custom-cmd -d "Execute a specific custom command" --require-parameter --no-files -a '(jq -r '.[]?.name' "'$CLI_MY_CMDS_FILE'" 2>/dev/null)'
 
 complete -c $CLI_NAME -n "__fish_use_subcommand" -l feed -d "Open your personalised feed"
 complete -c $CLI_NAME -n "__fish_use_subcommand" -l subscriptions-feed -d "Show latest videos from subscriptions"
@@ -3935,7 +3986,7 @@ complete -c $CLI_NAME -n "__fish_use_subcommand" -l edit-custom-cmds -d "Edit cu
 # Channels subcommand
 # ==========================================================================
 complete -c $CLI_NAME -f -n "__fish_use_subcommand" -a channels -d "Browse or search within a specific channel"
-complete -c $CLI_NAME -n "__fish_seen_subcommand_from channels" -o n -l name -d "Channel name" --require-parameter --no-files -a '(jq -r '.entries[].title' "'$CLI_SUBSCRIPTIONS_FILE'" 2>/dev/null)'
+complete -c $CLI_NAME -n "__fish_seen_subcommand_from channels" -o n -l name -d "Channel name" --require-parameter --no-files -a '(jq -r '.entries[].title' "'$CLI_MY_SUBSCRIPTIONS_FILE'" 2>/dev/null)'
 complete -c $CLI_NAME -n "__fish_seen_subcommand_from channels" -o v -l videos -d "List channel videos"
 complete -c $CLI_NAME -n "__fish_seen_subcommand_from channels" -o f -l featured -d "Show featured playlists"
 complete -c $CLI_NAME -n "__fish_seen_subcommand_from channels" -o s -l search -d "Search within channel" --require-parameter
@@ -4011,10 +4062,10 @@ complete -F _yt_x_complete __CLI_NAME__
 
   Write-Output (($body -replace '__CLI_NAME__', $CLI_NAME) `
       -replace '__SEARCH_HISTORY_FILE__', $CLI_SEARCH_HISTORY_FILE `
-      -replace '__SAVED_VIDEOS_FILE__', $CLI_SAVED_VIDEOS_FILE `
-      -replace '__CUSTOM_PLAYLISTS_FILE__', $CLI_CUSTOM_PLAYLISTS_FILE `
-      -replace '__CUSTOM_CMDS_FILE__', $CLI_CUSTOM_CMDS_FILE `
-      -replace '__SUBSCRIPTIONS_FILE__', $CLI_SUBSCRIPTIONS_FILE `
+      -replace '__SAVED_VIDEOS_FILE__', $CLI_MY_VIDEOS_FILE `
+      -replace '__CUSTOM_PLAYLISTS_FILE__', $CLI_MY_PLAYLISTS_FILE `
+      -replace '__CUSTOM_CMDS_FILE__', $CLI_MY_CMDS_FILE `
+      -replace '__SUBSCRIPTIONS_FILE__', $CLI_MY_SUBSCRIPTIONS_FILE `
       -replace '__EXTENSIONS_DIR__', $CLI_EXTENSIONS_DIR)
 
   exit 0
@@ -4215,10 +4266,10 @@ Register-ArgumentCompleter -CommandName '__CLI_NAME__' -Native -ScriptBlock {
 
   Write-Output (($body -replace '__CLI_NAME__', $CLI_NAME) `
       -replace '__SEARCH_HISTORY_FILE__', $CLI_SEARCH_HISTORY_FILE `
-      -replace '__SAVED_VIDEOS_FILE__', $CLI_SAVED_VIDEOS_FILE `
-      -replace '__CUSTOM_PLAYLISTS_FILE__', $CLI_CUSTOM_PLAYLISTS_FILE `
-      -replace '__CUSTOM_CMDS_FILE__', $CLI_CUSTOM_CMDS_FILE `
-      -replace '__SUBSCRIPTIONS_FILE__', $CLI_SUBSCRIPTIONS_FILE `
+      -replace '__SAVED_VIDEOS_FILE__', $CLI_MY_VIDEOS_FILE `
+      -replace '__CUSTOM_PLAYLISTS_FILE__', $CLI_MY_PLAYLISTS_FILE `
+      -replace '__CUSTOM_CMDS_FILE__', $CLI_MY_CMDS_FILE `
+      -replace '__SUBSCRIPTIONS_FILE__', $CLI_MY_SUBSCRIPTIONS_FILE `
       -replace '__EXTENSIONS_DIR__', $CLI_EXTENSIONS_DIR)
 
   exit 0
@@ -4289,9 +4340,9 @@ function _app_cmd_line_parser {
       { $_ -ceq '--subscriptions-feed' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_SUBS_FEED }
       { $_ -ceq '--watch-later' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_WATCH_LATER }
       { $_ -ceq '--playlists' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_PLAYLISTS }
-      { $_ -ceq '--custom-playlists' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_CUSTOM_PLAYLISTS }
-      { $_ -ceq '--saved' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_SAVED }
-      { $_ -ceq '--recent' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_RECENT }
+      { $_ -ceq '--custom-playlists' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_MY_PLAYLISTS }
+      { $_ -ceq '--saved' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_MY_VIDEOS }
+      { $_ -ceq '--recent' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_MY_RECENTS }
       { $_ -ceq '--liked' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_LIKED }
       { $_ -ceq '--watch-history' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_HISTORY }
       { $_ -ceq '--clips' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_CLIPS }
@@ -4304,16 +4355,16 @@ function _app_cmd_line_parser {
       { $_ -ceq '--edit-yt-dlp-config' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_MISC; $script:CMD_MISC_ACTION = $TXT_MENU_MISC_EDIT_YTDLP_CONFIG }
       { $_ -ceq '--edit-custom-cmds' } { $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_MISC; $script:CMD_MISC_ACTION = $TXT_MENU_MISC_EDIT_CUSTOM_CMDS }
       { @('-cp', '--custom-playlist') -ccontains $_ } {
-        $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_CUSTOM_PLAYLISTS
+        $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_MY_PLAYLISTS
         if (-not $b) {
-          $script:CMD_INPUT = ui_prompt $TXT_MENU_MAIN_CUSTOM_PLAYLISTS_PROMPT
+          $script:CMD_INPUT = ui_prompt $TXT_MENU_MAIN_MY_PLAYLISTS_PROMPT
           if (-not $CMD_INPUT) { _app_usage 1 }
         } else { $script:CMD_INPUT = $b; $shift_count = 2 }
       }
       { @('-sv', '--saved-video') -ccontains $_ } {
-        $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_SAVED
+        $script:CMD_MAIN_ACTION = $TXT_MENU_MAIN_MY_VIDEOS
         if (-not $b) {
-          $script:CMD_INPUT = ui_prompt $TXT_MENU_MAIN_SAVED_PROMPT
+          $script:CMD_INPUT = ui_prompt $TXT_MENU_MAIN_MY_VIDEOS_PROMPT
           if (-not $CMD_INPUT) { _app_usage 1 }
         } else { $script:CMD_INPUT = $b; $shift_count = 2 }
       }
