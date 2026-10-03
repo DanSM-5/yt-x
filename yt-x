@@ -446,6 +446,7 @@ NOTE: There are base options which are given to yt-dlp but can be overriden
   TXT_MENU_PLAYLISTS_EXPLORER_PROMPT="Select Playlist"
 
   TXT_MENU_PLAYLIST_EXPLORER_PROMPT="Select Media"
+  TXT_MENU_PLAYLIST_EXPLORER_INVALID_SELECTION="Could not resolve the selected media entry"
 
   TXT_MENU_PLAYLIST_PROMPT_ACTION="Select Media Action"
   TXT_MENU_MEDIA_ACTIONS_WATCH="Watch"
@@ -3088,21 +3089,44 @@ __menu_playlist_explorer_previous() {
 
 __menu_playlist_explorer() {
   local title
-  local id
   local video
+  local video_url
 
-  title="$1"
-  # TODO: consider not using -E since its not yet posix
-  # though apparently its suppose to be made standard soon
-  # and most environments support it, so it should be fine for now
-  id=$(printf "%s" "$title" | sed -E 's/^0*([0-9]+) .*/\1/')
-
-  STATE_CURRENT_VIDEO="$(
+  title=$(printf '%s' "$1" | sed 's/\r$//')
+  video="$(
     printf '%s' "$STATE_CURRENT_PLAYLIST_RESULTS" |
-      jq --argjson id "$((id - 1))" '.entries[$id]'
+      jq --compact-output --exit-status --arg selection "$title" '
+        [.entries[]? | select(.title == $selection)] as $exact
+        | if ($exact | length) == 1 then
+            $exact[0]
+          else
+            [
+              .entries[]?
+              | select(((.title // "") | sub("^[0-9]+ "; "")) == $selection)
+            ] as $without_number
+            | if ($without_number | length) == 1 then
+                $without_number[0]
+              else
+                empty
+              end
+          end
+      ' 2>/dev/null
   )"
-  STATE_CURRENT_VIDEO_URL="$(printf '%s' "$STATE_CURRENT_VIDEO" | jq '.url' -r)"
-  STATE_CURRENT_VIDEO_TITLE="$(printf '%s' "$title" | sed -E 's/^[0-9]+ //g')"
+
+  if [ -z "$video" ]; then
+    ui_notify_error "$TXT_MENU_PLAYLIST_EXPLORER_INVALID_SELECTION"
+    return 1
+  fi
+
+  video_url="$(printf '%s' "$video" | jq --exit-status --raw-output '.url // .webpage_url // .original_url // empty' 2>/dev/null)"
+  if [ -z "$video_url" ]; then
+    ui_notify_error "$TXT_MENU_PLAYLIST_EXPLORER_INVALID_SELECTION"
+    return 1
+  fi
+
+  STATE_CURRENT_VIDEO="$video"
+  STATE_CURRENT_VIDEO_URL="$video_url"
+  STATE_CURRENT_VIDEO_TITLE="$(printf '%s' "$video" | jq --raw-output '.title | sub("^[0-9]+ "; "")')"
   _state_push
 
   menu_media_actions
